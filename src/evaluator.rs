@@ -220,12 +220,12 @@ impl Evaluator {
             }
             Expr::Filter(expr) => self.eval_expr(expr, context),
             Expr::MethodCall {
-                object: _,
-                method: _,
-                args: _,
+                object,
+                method,
+                args,
             } => {
-                // Next up
-                todo!("UDF execution - needs UDF registry")
+                let obj_value = self.eval_expr(object, context)?;
+                self.eval_method_call(&obj_value, method, args, context)
             }
             Expr::UDFCall { name: _, args: _ } => {
                 // Next up
@@ -687,7 +687,7 @@ impl Evaluator {
     }
 
     fn filter_array(
-        &mut self,
+        &self,
         items: &[Value],
         condition: &Expr,
         ctx: &EvalContext,
@@ -708,7 +708,7 @@ impl Evaluator {
     }
 
     fn map_array(
-        &mut self,
+        &self,
         items: &[Value],
         expr: &Expr,
         ctx: &EvalContext,
@@ -724,5 +724,344 @@ impl Evaluator {
         }
 
         Ok(result)
+    }
+
+    /// Dispatch method calls to their implementations
+    fn eval_method_call(
+        &self,
+        object: &Value,
+        method: &str,
+        args: &[Expr],
+        ctx: &EvalContext,
+    ) -> Result<Value, EvalError> {
+        match method {
+            // Array methods
+            "any" => self.method_any(object, args, ctx),
+            "all" => self.method_all(object, args, ctx),
+            "filter" => self.method_filter(object, args, ctx),
+            "map" => self.method_map(object, args, ctx),
+            "count" => self.method_count(object),
+            "sum" => self.method_sum(object, args, ctx),
+            "first" => self.method_first(object),
+            "last" => self.method_last(object),
+            "exists" => self.method_exists(object),
+            "unique" => self.method_unique(object),
+            "sort" => self.method_sort(object, args, ctx),
+            _ => Err(EvalError::TypeError(format!(
+                "Unknown method: {}",
+                method
+            ))),
+        }
+    }
+
+    /// .any(lambda) - returns true if any element matches
+    fn method_any(
+        &self,
+        object: &Value,
+        args: &[Expr],
+        ctx: &EvalContext,
+    ) -> Result<Value, EvalError> {
+        let arr = match object {
+            Value::Array(arr) => arr,
+            _ => {
+                return Err(EvalError::TypeError(format!(
+                    ".any() requires array, got {:?}",
+                    object
+                )))
+            }
+        };
+
+        if args.is_empty() {
+            return Err(EvalError::TypeError(
+                ".any() requires a predicate argument".to_string(),
+            ));
+        }
+
+        let predicate = &args[0];
+
+        for item in arr {
+            let lambda_ctx = ctx.with_lambda(item.clone());
+            let result = self.eval_expr(predicate, &lambda_ctx)?;
+            if result.as_bool() {
+                return Ok(Value::Boolean(true));
+            }
+        }
+
+        Ok(Value::Boolean(false))
+    }
+
+    /// .all(lambda) - returns true if all elements match
+    fn method_all(
+        &self,
+        object: &Value,
+        args: &[Expr],
+        ctx: &EvalContext,
+    ) -> Result<Value, EvalError> {
+        let arr = match object {
+            Value::Array(arr) => arr,
+            _ => {
+                return Err(EvalError::TypeError(format!(
+                    ".all() requires array, got {:?}",
+                    object
+                )))
+            }
+        };
+
+        if args.is_empty() {
+            return Err(EvalError::TypeError(
+                ".all() requires a predicate argument".to_string(),
+            ));
+        }
+
+        let predicate = &args[0];
+
+        for item in arr {
+            let lambda_ctx = ctx.with_lambda(item.clone());
+            let result = self.eval_expr(predicate, &lambda_ctx)?;
+            if !result.as_bool() {
+                return Ok(Value::Boolean(false));
+            }
+        }
+
+        Ok(Value::Boolean(true))
+    }
+
+    /// .filter(lambda) - returns array of matching elements
+    fn method_filter(
+        &self,
+        object: &Value,
+        args: &[Expr],
+        ctx: &EvalContext,
+    ) -> Result<Value, EvalError> {
+        let arr = match object {
+            Value::Array(arr) => arr,
+            _ => {
+                return Err(EvalError::TypeError(format!(
+                    ".filter() requires array, got {:?}",
+                    object
+                )))
+            }
+        };
+
+        if args.is_empty() {
+            return Err(EvalError::TypeError(
+                ".filter() requires a predicate argument".to_string(),
+            ));
+        }
+
+        let predicate = &args[0];
+        let filtered = self.filter_array(arr, predicate, ctx)?;
+
+        Ok(Value::Array(filtered))
+    }
+
+    /// .map(lambda) - transforms each element
+    fn method_map(
+        &self,
+        object: &Value,
+        args: &[Expr],
+        ctx: &EvalContext,
+    ) -> Result<Value, EvalError> {
+        let arr = match object {
+            Value::Array(arr) => arr,
+            _ => {
+                return Err(EvalError::TypeError(format!(
+                    ".map() requires array, got {:?}",
+                    object
+                )))
+            }
+        };
+
+        if args.is_empty() {
+            return Err(EvalError::TypeError(
+                ".map() requires a transform expression argument".to_string(),
+            ));
+        }
+
+        let transform = &args[0];
+        let mapped = self.map_array(arr, transform, ctx)?;
+
+        Ok(Value::Array(mapped))
+    }
+
+    /// .count() - returns number of elements
+    fn method_count(&self, object: &Value) -> Result<Value, EvalError> {
+        match object {
+            Value::Array(arr) => Ok(Value::Integer(arr.len() as i64)),
+            _ => Err(EvalError::TypeError(format!(
+                ".count() requires array, got {:?}",
+                object
+            ))),
+        }
+    }
+
+    /// .sum(lambda?) - sums numeric values, optionally extracting with lambda
+    fn method_sum(
+        &self,
+        object: &Value,
+        args: &[Expr],
+        ctx: &EvalContext,
+    ) -> Result<Value, EvalError> {
+        let arr = match object {
+            Value::Array(arr) => arr,
+            _ => {
+                return Err(EvalError::TypeError(format!(
+                    ".sum() requires array, got {:?}",
+                    object
+                )))
+            }
+        };
+
+        let mut sum_int: i64 = 0;
+        let mut sum_float: f64 = 0.0;
+        let mut has_float = false;
+
+        for item in arr {
+            let value = if args.is_empty() {
+                item.clone()
+            } else {
+                let lambda_ctx = ctx.with_lambda(item.clone());
+                self.eval_expr(&args[0], &lambda_ctx)?
+            };
+
+            match value {
+                Value::Integer(n) => {
+                    if has_float {
+                        sum_float += n as f64;
+                    } else {
+                        sum_int += n;
+                    }
+                }
+                Value::Float(n) => {
+                    if !has_float {
+                        sum_float = sum_int as f64;
+                        has_float = true;
+                    }
+                    sum_float += n;
+                }
+                _ => {
+                    return Err(EvalError::TypeError(format!(
+                        ".sum() requires numeric values, got {:?}",
+                        value
+                    )))
+                }
+            }
+        }
+
+        if has_float {
+            Ok(Value::Float(sum_float))
+        } else {
+            Ok(Value::Integer(sum_int))
+        }
+    }
+
+    /// .first() - returns first element or null
+    fn method_first(&self, object: &Value) -> Result<Value, EvalError> {
+        match object {
+            Value::Array(arr) => Ok(arr.first().cloned().unwrap_or(Value::Null)),
+            _ => Err(EvalError::TypeError(format!(
+                ".first() requires array, got {:?}",
+                object
+            ))),
+        }
+    }
+
+    /// .last() - returns last element or null
+    fn method_last(&self, object: &Value) -> Result<Value, EvalError> {
+        match object {
+            Value::Array(arr) => Ok(arr.last().cloned().unwrap_or(Value::Null)),
+            _ => Err(EvalError::TypeError(format!(
+                ".last() requires array, got {:?}",
+                object
+            ))),
+        }
+    }
+
+    /// .exists() - returns true if array exists and is non-empty
+    fn method_exists(&self, object: &Value) -> Result<Value, EvalError> {
+        match object {
+            Value::Array(arr) => Ok(Value::Boolean(!arr.is_empty())),
+            Value::Null => Ok(Value::Boolean(false)),
+            _ => Err(EvalError::TypeError(format!(
+                ".exists() requires array, got {:?}",
+                object
+            ))),
+        }
+    }
+
+    /// .unique() - returns array with duplicates removed
+    fn method_unique(&self, object: &Value) -> Result<Value, EvalError> {
+        let arr = match object {
+            Value::Array(arr) => arr,
+            _ => {
+                return Err(EvalError::TypeError(format!(
+                    ".unique() requires array, got {:?}",
+                    object
+                )))
+            }
+        };
+
+        let mut result = Vec::new();
+        for item in arr {
+            if !result.contains(item) {
+                result.push(item.clone());
+            }
+        }
+
+        Ok(Value::Array(result))
+    }
+
+    /// .sort(lambda?) - returns sorted array
+    fn method_sort(
+        &self,
+        object: &Value,
+        args: &[Expr],
+        ctx: &EvalContext,
+    ) -> Result<Value, EvalError> {
+        let arr = match object {
+            Value::Array(arr) => arr.clone(),
+            _ => {
+                return Err(EvalError::TypeError(format!(
+                    ".sort() requires array, got {:?}",
+                    object
+                )))
+            }
+        };
+
+        if arr.is_empty() {
+            return Ok(Value::Array(arr));
+        }
+
+        // Extract sort keys if lambda provided
+        let mut items_with_keys: Vec<(Value, Value)> = if args.is_empty() {
+            arr.iter().map(|v| (v.clone(), v.clone())).collect()
+        } else {
+            let mut result = Vec::new();
+            for item in &arr {
+                let lambda_ctx = ctx.with_lambda(item.clone());
+                let key = self.eval_expr(&args[0], &lambda_ctx)?;
+                result.push((item.clone(), key));
+            }
+            result
+        };
+
+        // Sort by keys
+        items_with_keys.sort_by(|(_, a), (_, b)| self.compare_values(a, b));
+
+        let sorted: Vec<Value> = items_with_keys.into_iter().map(|(v, _)| v).collect();
+        Ok(Value::Array(sorted))
+    }
+
+    /// Compare two values for sorting
+    fn compare_values(&self, a: &Value, b: &Value) -> std::cmp::Ordering {
+        match (a, b) {
+            (Value::Integer(a), Value::Integer(b)) => a.cmp(b),
+            (Value::Float(a), Value::Float(b)) => a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal),
+            (Value::Integer(a), Value::Float(b)) => (*a as f64).partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal),
+            (Value::Float(a), Value::Integer(b)) => a.partial_cmp(&(*b as f64)).unwrap_or(std::cmp::Ordering::Equal),
+            (Value::String(a), Value::String(b)) => a.cmp(b),
+            (Value::Boolean(a), Value::Boolean(b)) => a.cmp(b),
+            _ => std::cmp::Ordering::Equal,
+        }
     }
 }

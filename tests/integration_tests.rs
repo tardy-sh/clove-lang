@@ -646,8 +646,422 @@ fn test_debug_simple_subtract() {
     let doc = json_object(vec![
         ("discount", Value::Float(0.1)),
     ]);
-    
+
     // Test 1 - $[discount]
     let result = eval_expr("1 - $[discount]", doc).unwrap();
     eprintln!("1 - $[discount] = {:?}", result);
+}
+
+// ============================================
+// Array Method Tests
+// ============================================
+
+#[test]
+fn test_method_any_true() {
+    let doc = json_object(vec![
+        ("items", json_array(vec![
+            json_object(vec![("price", Value::Integer(50))]),
+            json_object(vec![("price", Value::Integer(150))]),
+            json_object(vec![("price", Value::Integer(200))]),
+        ])),
+    ]);
+
+    let result = eval_expr("$[items].any(@[price] > 100)", doc).unwrap();
+    assert_eq!(result, Value::Boolean(true));
+}
+
+#[test]
+fn test_method_any_false() {
+    let doc = json_object(vec![
+        ("items", json_array(vec![
+            json_object(vec![("price", Value::Integer(50))]),
+            json_object(vec![("price", Value::Integer(75))]),
+        ])),
+    ]);
+
+    let result = eval_expr("$[items].any(@[price] > 100)", doc).unwrap();
+    assert_eq!(result, Value::Boolean(false));
+}
+
+#[test]
+fn test_method_any_simple_value() {
+    let doc = json_object(vec![
+        ("tags", json_array(vec![
+            Value::String("urgent".into()),
+            Value::String("important".into()),
+        ])),
+    ]);
+
+    let result = eval_expr(r#"$[tags].any(@ == "urgent")"#, doc).unwrap();
+    assert_eq!(result, Value::Boolean(true));
+}
+
+#[test]
+fn test_method_all_true() {
+    let doc = json_object(vec![
+        ("scores", json_array(vec![
+            Value::Integer(70),
+            Value::Integer(85),
+            Value::Integer(90),
+        ])),
+    ]);
+
+    let result = eval_expr("$[scores].all(@ >= 60)", doc).unwrap();
+    assert_eq!(result, Value::Boolean(true));
+}
+
+#[test]
+fn test_method_all_false() {
+    let doc = json_object(vec![
+        ("scores", json_array(vec![
+            Value::Integer(70),
+            Value::Integer(55),
+            Value::Integer(90),
+        ])),
+    ]);
+
+    let result = eval_expr("$[scores].all(@ >= 60)", doc).unwrap();
+    assert_eq!(result, Value::Boolean(false));
+}
+
+#[test]
+fn test_method_filter() {
+    let doc = json_object(vec![
+        ("numbers", json_array(vec![
+            Value::Integer(-5),
+            Value::Integer(10),
+            Value::Integer(-3),
+            Value::Integer(20),
+        ])),
+    ]);
+
+    let result = eval_expr("$[numbers].filter(@ > 0)", doc).unwrap();
+    assert_eq!(result, json_array(vec![
+        Value::Integer(10),
+        Value::Integer(20),
+    ]));
+}
+
+#[test]
+fn test_method_filter_objects() {
+    let doc = json_object(vec![
+        ("items", json_array(vec![
+            json_object(vec![("category", Value::String("electronics".into()))]),
+            json_object(vec![("category", Value::String("books".into()))]),
+            json_object(vec![("category", Value::String("electronics".into()))]),
+        ])),
+    ]);
+
+    let result = eval_expr(r#"$[items].filter(@[category] == "electronics")"#, doc).unwrap();
+    match result {
+        Value::Array(arr) => assert_eq!(arr.len(), 2),
+        _ => panic!("Expected array"),
+    }
+}
+
+#[test]
+fn test_method_map_extract_field() {
+    let doc = json_object(vec![
+        ("items", json_array(vec![
+            json_object(vec![("name", Value::String("Apple".into()))]),
+            json_object(vec![("name", Value::String("Banana".into()))]),
+        ])),
+    ]);
+
+    let result = eval_expr("$[items].map(@[name])", doc).unwrap();
+    assert_eq!(result, json_array(vec![
+        Value::String("Apple".into()),
+        Value::String("Banana".into()),
+    ]));
+}
+
+#[test]
+fn test_method_map_transform() {
+    let doc = json_object(vec![
+        ("prices", json_array(vec![
+            Value::Integer(100),
+            Value::Integer(200),
+        ])),
+    ]);
+
+    let result = eval_expr("$[prices].map(@ * 1.1)", doc).unwrap();
+    assert_eq!(result, json_array(vec![
+        Value::Integer(110),
+        Value::Integer(220),
+    ]));
+}
+
+#[test]
+fn test_method_count() {
+    let doc = json_object(vec![
+        ("items", json_array(vec![
+            Value::Integer(1),
+            Value::Integer(2),
+            Value::Integer(3),
+            Value::Integer(4),
+        ])),
+    ]);
+
+    let result = eval_expr("$[items].count()", doc).unwrap();
+    assert_eq!(result, Value::Integer(4));
+}
+
+#[test]
+fn test_method_count_empty() {
+    let doc = json_object(vec![
+        ("items", json_array(vec![])),
+    ]);
+
+    let result = eval_expr("$[items].count()", doc).unwrap();
+    assert_eq!(result, Value::Integer(0));
+}
+
+#[test]
+fn test_method_sum_integers() {
+    let doc = json_object(vec![
+        ("numbers", json_array(vec![
+            Value::Integer(10),
+            Value::Integer(20),
+            Value::Integer(30),
+        ])),
+    ]);
+
+    let result = eval_expr("$[numbers].sum()", doc).unwrap();
+    assert_eq!(result, Value::Integer(60));
+}
+
+#[test]
+fn test_method_sum_floats() {
+    let doc = json_object(vec![
+        ("numbers", json_array(vec![
+            Value::Float(1.5),
+            Value::Float(2.5),
+            Value::Float(3.0),
+        ])),
+    ]);
+
+    let result = eval_expr("$[numbers].sum()", doc).unwrap();
+    assert_eq!(result, Value::Float(7.0));
+}
+
+#[test]
+fn test_method_sum_with_lambda() {
+    let doc = json_object(vec![
+        ("items", json_array(vec![
+            json_object(vec![("price", Value::Integer(50))]),
+            json_object(vec![("price", Value::Integer(100))]),
+            json_object(vec![("price", Value::Integer(150))]),
+        ])),
+    ]);
+
+    let result = eval_expr("$[items].sum(@[price])", doc).unwrap();
+    assert_eq!(result, Value::Integer(300));
+}
+
+#[test]
+fn test_method_first() {
+    let doc = json_object(vec![
+        ("items", json_array(vec![
+            Value::String("first".into()),
+            Value::String("second".into()),
+            Value::String("third".into()),
+        ])),
+    ]);
+
+    let result = eval_expr("$[items].first()", doc).unwrap();
+    assert_eq!(result, Value::String("first".into()));
+}
+
+#[test]
+fn test_method_first_empty() {
+    let doc = json_object(vec![
+        ("items", json_array(vec![])),
+    ]);
+
+    let result = eval_expr("$[items].first()", doc).unwrap();
+    assert_eq!(result, Value::Null);
+}
+
+#[test]
+fn test_method_last() {
+    let doc = json_object(vec![
+        ("items", json_array(vec![
+            Value::String("first".into()),
+            Value::String("second".into()),
+            Value::String("third".into()),
+        ])),
+    ]);
+
+    let result = eval_expr("$[items].last()", doc).unwrap();
+    assert_eq!(result, Value::String("third".into()));
+}
+
+#[test]
+fn test_method_last_empty() {
+    let doc = json_object(vec![
+        ("items", json_array(vec![])),
+    ]);
+
+    let result = eval_expr("$[items].last()", doc).unwrap();
+    assert_eq!(result, Value::Null);
+}
+
+#[test]
+fn test_method_exists_non_empty() {
+    let doc = json_object(vec![
+        ("items", json_array(vec![Value::Integer(1)])),
+    ]);
+
+    let result = eval_expr("$[items].exists()", doc).unwrap();
+    assert_eq!(result, Value::Boolean(true));
+}
+
+#[test]
+fn test_method_exists_empty() {
+    let doc = json_object(vec![
+        ("items", json_array(vec![])),
+    ]);
+
+    let result = eval_expr("$[items].exists()", doc).unwrap();
+    assert_eq!(result, Value::Boolean(false));
+}
+
+#[test]
+fn test_method_unique() {
+    let doc = json_object(vec![
+        ("tags", json_array(vec![
+            Value::String("a".into()),
+            Value::String("b".into()),
+            Value::String("a".into()),
+            Value::String("c".into()),
+            Value::String("b".into()),
+        ])),
+    ]);
+
+    let result = eval_expr("$[tags].unique()", doc).unwrap();
+    assert_eq!(result, json_array(vec![
+        Value::String("a".into()),
+        Value::String("b".into()),
+        Value::String("c".into()),
+    ]));
+}
+
+#[test]
+fn test_method_unique_integers() {
+    let doc = json_object(vec![
+        ("numbers", json_array(vec![
+            Value::Integer(1),
+            Value::Integer(2),
+            Value::Integer(1),
+            Value::Integer(3),
+            Value::Integer(2),
+        ])),
+    ]);
+
+    let result = eval_expr("$[numbers].unique()", doc).unwrap();
+    assert_eq!(result, json_array(vec![
+        Value::Integer(1),
+        Value::Integer(2),
+        Value::Integer(3),
+    ]));
+}
+
+#[test]
+fn test_method_sort_integers() {
+    let doc = json_object(vec![
+        ("numbers", json_array(vec![
+            Value::Integer(30),
+            Value::Integer(10),
+            Value::Integer(20),
+        ])),
+    ]);
+
+    let result = eval_expr("$[numbers].sort()", doc).unwrap();
+    assert_eq!(result, json_array(vec![
+        Value::Integer(10),
+        Value::Integer(20),
+        Value::Integer(30),
+    ]));
+}
+
+#[test]
+fn test_method_sort_strings() {
+    let doc = json_object(vec![
+        ("names", json_array(vec![
+            Value::String("charlie".into()),
+            Value::String("alice".into()),
+            Value::String("bob".into()),
+        ])),
+    ]);
+
+    let result = eval_expr("$[names].sort()", doc).unwrap();
+    assert_eq!(result, json_array(vec![
+        Value::String("alice".into()),
+        Value::String("bob".into()),
+        Value::String("charlie".into()),
+    ]));
+}
+
+#[test]
+fn test_method_sort_by_field() {
+    let doc = json_object(vec![
+        ("items", json_array(vec![
+            json_object(vec![("price", Value::Integer(150))]),
+            json_object(vec![("price", Value::Integer(50))]),
+            json_object(vec![("price", Value::Integer(100))]),
+        ])),
+    ]);
+
+    let result = eval_expr("$[items].sort(@[price])", doc).unwrap();
+    match result {
+        Value::Array(arr) => {
+            assert_eq!(arr.len(), 3);
+            match &arr[0] {
+                Value::Object(o) => assert_eq!(o.get("price"), Some(&Value::Integer(50))),
+                _ => panic!("Expected object"),
+            }
+            match &arr[1] {
+                Value::Object(o) => assert_eq!(o.get("price"), Some(&Value::Integer(100))),
+                _ => panic!("Expected object"),
+            }
+            match &arr[2] {
+                Value::Object(o) => assert_eq!(o.get("price"), Some(&Value::Integer(150))),
+                _ => panic!("Expected object"),
+            }
+        }
+        _ => panic!("Expected array"),
+    }
+}
+
+#[test]
+fn test_method_chaining() {
+    let doc = json_object(vec![
+        ("items", json_array(vec![
+            json_object(vec![("price", Value::Integer(50)), ("active", Value::Boolean(true))]),
+            json_object(vec![("price", Value::Integer(150)), ("active", Value::Boolean(false))]),
+            json_object(vec![("price", Value::Integer(200)), ("active", Value::Boolean(true))]),
+        ])),
+    ]);
+
+    // Filter active items, then sum their prices
+    let result = eval_expr("$[items].filter(@[active] == true).sum(@[price])", doc).unwrap();
+    assert_eq!(result, Value::Integer(250));
+}
+
+#[test]
+fn test_method_in_query_pipeline() {
+    let doc = json_object(vec![
+        ("items", json_array(vec![
+            json_object(vec![("price", Value::Integer(50))]),
+            json_object(vec![("price", Value::Integer(150))]),
+        ])),
+    ]);
+
+    let result = eval_query("$ | ?($[items].any(@[price] > 100))", doc).unwrap();
+    // Should pass the filter since there's an item with price > 100
+    match result {
+        Value::Object(_) => {} // passed
+        Value::Null => panic!("Should have passed filter"),
+        _ => panic!("Expected object or null"),
+    }
 }

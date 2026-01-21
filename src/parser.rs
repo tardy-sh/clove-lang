@@ -210,10 +210,35 @@ impl Parser {
 
                 self.advance();
 
-                expr = Expr::Access {
-                    object: Box::new(expr),
-                    key: Box::new(Expr::Key(name)),
-                };
+                // Check if this is a method call (identifier followed by '(')
+                if self.check(&Token::LParen) {
+                    self.advance(); // consume '('
+
+                    let mut args = Vec::new();
+
+                    // Parse arguments
+                    while !self.check(&Token::RParen) {
+                        args.push(self.parse_expression());
+
+                        if !self.check(&Token::RParen) {
+                            self.expect(Token::Comma);
+                        }
+                    }
+
+                    self.expect(Token::RParen);
+
+                    expr = Expr::MethodCall {
+                        object: Box::new(expr),
+                        method: name,
+                        args,
+                    };
+                } else {
+                    // Regular field access
+                    expr = Expr::Access {
+                        object: Box::new(expr),
+                        key: Box::new(Expr::Key(name)),
+                    };
+                }
             } else {
                 break;
             }
