@@ -1,0 +1,728 @@
+use std::{collections::HashMap, env};
+
+use rust_decimal::{Decimal, prelude::FromPrimitive, prelude::ToPrimitive};
+
+use crate::{
+    ast::{BinOp, Expr, Query, Statement},
+    transform::{PathSegment, TransformType, determine_transform_type, extract_path},
+    value::Value,
+};
+
+/// Evaluation context holding both root and lambda contexts
+#[derive(Debug, Clone)]
+pub struct EvalContext {
+    /// The root document (referred to by `$`)
+    pub root: Value,
+    /// The current lambda item (what @ refers to), if in lambda function
+    pub lambda: Option<Value>,
+}
+
+impl EvalContext {
+    pub fn new(root: Value) -> Self {
+        EvalContext { root, lambda: None }
+    }
+
+    /// Create a new context with lambda item
+    pub fn with_lambda(&self, lambda: Value) -> Self {
+        EvalContext {
+            root: self.root.clone(),
+            lambda: Some(lambda),
+        }
+    }
+}
+
+/// The main query evaluator.
+///
+/// Executes parsed queries against JSON documents, maintaining scope references
+/// and handling transformations.
+#[derive(Default)]
+pub struct Evaluator {
+    /// Named scope references defined during query execution (@name := ...)
+    scopes: HashMap<String, Value>,
+}
+
+/// Errors that can occur during query evaluation.
+#[derive(Debug)]
+pub enum EvalError {
+    /// Type mismatch or invalid operation for the given type
+    TypeError(String),
+
+    /// Invalid field access or array index
+    AccessError(String),
+
+    /// Reference to undefined scope (@name not defined)
+    UndefinedScope(String),
+
+    /// Reference to undefined environment variable ($VARNAME)
+    UndefinedEnvVar(String),
+
+    /// Division by zero
+    DivisionByZero,
+}
+
+impl Evaluator {
+    /// Creates a new evaluator with empty scope references.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Evaluates a complete query against a JSON document.
+    ///
+    /// Executes the query pipeline statement by statement, threading the result
+    /// through each transformation, and returns the final output.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - The parsed query to execute
+    /// * `document` - The JSON document to query (becomes the root `$`)
+    ///
+    /// # Returns
+    ///
+    /// The result of the query's output expression, or the final transformed
+    /// document if no explicit output is specified.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use clove_lang::Evaluator;
+    /// use clove_lang::parser::Parser;
+    /// use clove_lang::lexer::Lexer;
+    /// use clove_lang::Value;
+    /// use std::collections::HashMap;
+    ///
+    /// let mut doc = HashMap::new();
+    /// doc.insert("price".to_string(), Value::Integer(100));
+    ///
+    /// let query_str = "$ | ?($[price] > 50)";
+    /// let lexer = Lexer::new(query_str);
+    /// let mut parser = Parser::new(lexer);
+    /// let query = parser.parse_query();
+    ///
+    /// let mut evaluator = Evaluator::new();
+    /// let result = evaluator.eval_query(&query, Value::Object(doc)).unwrap();
+    /// // Returns the document because price > 50
+    /// ```
+    pub fn eval_query(&mut self, query: &Query, document: Value) -> Result<Value, EvalError> {
+        let mut current = document;
+
+        for stmt in &query.statements {
+            let ctx = EvalContext::new(current);
+            current = self.eval_statement(stmt, &ctx)?;
+        }
+
+        match &query.output {
+            Some(expr) => {
+                let ctx = EvalContext::new(current);
+
+                self.eval_expr(expr, &ctx)
+            }
+            None => Ok(current),
+        }
+    }
+
+    /// Evaluates a single expression against a JSON document.
+    ///
+    /// This is a convenience method for evaluating standalone expressions
+    /// without a full query pipeline.
+    ///
+    /// # Arguments
+    ///
+    /// * `expr` - The expression to evaluate
+    /// * `document` - The JSON document (becomes the root `$`)
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use clove_lang::{Evaluator, Expr, Value};
+    ///
+    /// let mut evaluator = Evaluator::new();
+    /// let expr = Expr::Root;
+    /// let doc = Value::Integer(42);
+    ///
+    /// let result = evaluator.eval_expression(&expr, doc).unwrap();
+    /// assert_eq!(result, Value::Integer(42));
+    /// ```
+    pub fn eval_expression(&mut self, expr: &Expr, document: Value) -> Result<Value, EvalError> {
+        let context = EvalContext::new(document);
+        self.eval_expr(expr, &context)
+    }
+
+    fn eval_statement(&mut self, stmt: &Statement, ctx: &EvalContext) -> Result<Value, EvalError> {
+        match stmt {
+            Statement::Filter(condition) => {
+                let result = self.eval_expr(condition, ctx)?;
+                if result.as_bool() {
+                    Ok(ctx.root.clone())
+                } else {
+                    Ok(Value::Null)
+                }
+            }
+            Statement::Transform { target, value } => self.apply_transform(ctx, target, value),
+            Statement::ScopeDefinition { name, path } => {
+                let value = self.eval_expr(path, ctx)?;
+                self.scopes.insert(name.clone(), value);
+                Ok(ctx.root.clone())
+            }
+            Statement::Access(expr) => self.eval_expr(expr, ctx),
+            Statement::ExistenceCheck(_expr) => unreachable!(),
+        }
+    }
+
+    fn eval_expr(&self, expr: &Expr, context: &EvalContext) -> Result<Value, EvalError> {
+        match expr {
+            Expr::Float(n) => Ok(Value::Float(*n)),
+            Expr::Integer(n) => Ok(Value::Integer(*n)),
+            Expr::String(s) => Ok(Value::String(s.clone())),
+            Expr::Boolean(b) => Ok(Value::Boolean(*b)),
+            Expr::Null => Ok(Value::Null),
+            Expr::Root => Ok(context.root.clone()),
+            Expr::EnvVar(name) => match env::var(name) {
+                Ok(val) => Ok(Value::String(val)),
+                Err(_) => Err(EvalError::UndefinedEnvVar(name.to_string())),
+            },
+            Expr::ScopeRef(name) => self
+                .scopes
+                .get(name)
+                .cloned()
+                .ok_or_else(|| EvalError::UndefinedScope(name.clone())),
+            Expr::LambdaParam => {
+                // In lambda context, `@` refers to current item.
+                // This is passed as context already.
+                match &context.lambda {
+                    Some(lambda) => Ok(lambda.clone()),
+                    None => Ok(context.root.clone()),
+                }
+            }
+            Expr::Access { object, key } => {
+                let obj_value = self.eval_expr(object, context)?;
+                let key_value = self.eval_expr(key, context)?;
+                self.apply_access(&obj_value, &key_value)
+            }
+            Expr::BinaryOp { op, left, right } => {
+                let left_val = self.eval_expr(left, context)?;
+                let right_val = self.eval_expr(right, context)?;
+                self.apply_binop(*op, &left_val, &right_val)
+            }
+            Expr::Object(items) => {
+                let mut map = HashMap::new();
+                for (key, expr) in items {
+                    let value = self.eval_expr(expr, context)?;
+                    map.insert(key.clone(), value);
+                }
+                Ok(Value::Object(map))
+            }
+            Expr::Array(exprs) => {
+                let mut arr = Vec::new();
+                for expr in exprs {
+                    arr.push(self.eval_expr(expr, context)?);
+                }
+                Ok(Value::Array(arr))
+            }
+            Expr::Filter(expr) => self.eval_expr(expr, context),
+            Expr::MethodCall {
+                object: _,
+                method: _,
+                args: _,
+            } => {
+                // Next up
+                todo!("UDF execution - needs UDF registry")
+            }
+            Expr::UDFCall { name: _, args: _ } => {
+                // Next up
+                todo!("UDF execution - needs UDF registry")
+            }
+            Expr::ArgRef(n) => Err(EvalError::TypeError(format!(
+                "Argument reference @{} can only be used within UDF definitions",
+                n
+            ))),
+            Expr::ExistenceCheck(expr) => {
+                let value = self.eval_expr(expr, context)?;
+                let exists = match value {
+                    Value::Null => false,
+                    Value::Array(ref arr) => !arr.is_empty(),
+                    Value::Object(ref obj) => !obj.is_empty(),
+                    Value::String(ref s) => !s.is_empty(),
+                    _ => true,
+                };
+                Ok(Value::Boolean(exists))
+            }
+            Expr::Key(name) => Ok(Value::String(name.clone())),
+        }
+    }
+
+    fn apply_access(&self, object: &Value, key: &Value) -> Result<Value, EvalError> {
+        match (object, key) {
+            (Value::Object(map), Value::Float(k)) => {
+                Ok(map.get(&k.to_string()).cloned().unwrap_or(Value::Null))
+            }
+            (Value::Object(map), Value::Boolean(k)) => {
+                Ok(map.get(&k.to_string()).cloned().unwrap_or(Value::Null))
+            }
+            (Value::Object(map), Value::Integer(k)) => {
+                Ok(map.get(&k.to_string()).cloned().unwrap_or(Value::Null))
+            }
+            (Value::Object(map), Value::String(k)) => {
+                Ok(map.get(k).cloned().unwrap_or(Value::Null))
+            }
+            (Value::Array(arr), Value::Integer(n)) => {
+                let index = *n as usize;
+                Ok(arr.get(index).cloned().unwrap_or(Value::Null))
+            }
+            _ => Err(EvalError::TypeError(format!(
+                "Cannot access {:?} with key {:?}",
+                object, key
+            ))),
+        }
+    }
+
+    fn apply_binop(&self, op: BinOp, left: &Value, right: &Value) -> Result<Value, EvalError> {
+        match op {
+            BinOp::Add => match (left, right) {
+                (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a + b)),
+                (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a + b)),
+                (Value::Integer(a), Value::Float(b)) => {
+                    if let Some(ad) = Decimal::from_i64(*a)
+                        && let Some(bd) = Decimal::from_f64(*b)
+                    {
+                        let rd = ad + bd;
+                        if rd.is_integer() &&
+                            let Some(r) = rd.to_i64() {
+                            return Ok(Value::Integer(r));
+                        } else if let Some(r) = rd.to_f64() {
+                            return Ok(Value::Float(r));
+                        }
+                    }
+                    let res = *a as f64 + b;
+                    Ok(Value::Float(res))
+                }
+                (Value::Float(a), Value::Integer(b)) => {
+                    if let Some(ad) = Decimal::from_f64(*a)
+                        && let Some(bd) = Decimal::from_i64(*b)
+                    {
+                        let rd = ad + bd;
+                        if rd.is_integer() &&
+                            let Some(r) = rd.to_i64() {
+                            return Ok(Value::Integer(r));
+                        } else if let Some(r) = rd.to_f64() {
+                            return Ok(Value::Float(r));
+                        }
+                    }
+                    let res = *a + *b as f64;
+                    Ok(Value::Float(res))
+                }
+                (Value::String(a), Value::String(b)) => Ok(Value::String(format!("{}{}", a, b))),
+                (a, b) => Err(EvalError::TypeError(format!(
+                    "Addition undefined for operands {:?} and {:?}",
+                    a, b
+                ))),
+            },
+            BinOp::Subtract => match (left, right) {
+                (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a - b)),
+                (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a - b)),
+                (Value::Integer(a), Value::Float(b)) => {
+                    if let Some(ad) = Decimal::from_i64(*a)
+                        && let Some(bd) = Decimal::from_f64(*b)
+                    {
+                        let rd = ad - bd;
+                        if rd.is_integer() &&
+                            let Some(r) = rd.to_i64() {
+                            return Ok(Value::Integer(r));
+                        } else if let Some(r) = rd.to_f64() {
+                            return Ok(Value::Float(r));
+                        }
+                    }
+                    let res = *a as f64 - b;
+                    Ok(Value::Float(res))
+                }
+                (Value::Float(a), Value::Integer(b)) => {
+                    if let Some(ad) = Decimal::from_f64(*a)
+                        && let Some(bd) = Decimal::from_i64(*b)
+                    {
+                        let rd = ad - bd;
+                        if rd.is_integer() &&
+                            let Some(r) = rd.to_i64() {
+                            return Ok(Value::Integer(r));
+                        } else if let Some(r) = rd.to_f64() {
+                            return Ok(Value::Float(r));
+                        }
+                    }
+                    let res = *a - *b as f64;
+                    Ok(Value::Float(res))
+                }
+                (a, b) => Err(EvalError::TypeError(format!(
+                    "Subtraction undefined for operands {:?} and {:?}",
+                    a, b
+                ))),
+            },
+
+            BinOp::Multiply => match (left, right) {
+                (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a * b)),
+                (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a * b)),
+                (Value::Integer(a), Value::Float(b)) => {
+                    if let Some(ad) = Decimal::from_i64(*a)
+                        && let Some(bd) = Decimal::from_f64(*b)
+                    {
+                        let rd = ad * bd;
+                        if rd.is_integer() &&
+                            let Some(r) = rd.to_i64() {
+                            return Ok(Value::Integer(r));
+                        } else if let Some(r) = rd.to_f64() {
+                            return Ok(Value::Float(r));
+                        }
+                    }
+                    let res = *a as f64 * b;
+                    Ok(Value::Float(res))
+                }
+                (Value::Float(a), Value::Integer(b)) => {
+                    if let Some(ad) = Decimal::from_f64(*a)
+                        && let Some(bd) = Decimal::from_i64(*b)
+                    {
+                        let rd = ad * bd;
+                        if rd.is_integer() &&
+                            let Some(r) = rd.to_i64() {
+                            return Ok(Value::Integer(r));
+                        } else if let Some(r) = rd.to_f64() {
+                            return Ok(Value::Float(r));
+                        }
+                    }
+                    let res = *a * *b as f64;
+                    Ok(Value::Float(res))
+                }
+                (a, b) => Err(EvalError::TypeError(format!(
+                    "Multiplication undefined for operands {:?} and {:?}",
+                    a, b
+                ))),
+            },
+            BinOp::Divide => match (left, right) {
+                (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a / b)),
+                (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a / b)),
+                (Value::Integer(a), Value::Float(b)) => {
+                    if let Some(ad) = Decimal::from_i64(*a)
+                        && let Some(bd) = Decimal::from_f64(*b)
+                    {
+                        let rd = ad / bd;
+                        if rd.is_integer() &&
+                            let Some(r) = rd.to_i64() {
+                            return Ok(Value::Integer(r));
+                        } else if let Some(r) = rd.to_f64() {
+                            return Ok(Value::Float(r));
+                        }
+                    }
+                    let res = *a as f64 / b;
+                    Ok(Value::Float(res))
+                }
+                (Value::Float(a), Value::Integer(b)) => {
+                    if let Some(ad) = Decimal::from_f64(*a)
+                        && let Some(bd) = Decimal::from_i64(*b)
+                    {
+                        let rd = ad / bd;
+                        if rd.is_integer() &&
+                            let Some(r) = rd.to_i64() {
+                            return Ok(Value::Integer(r));
+                        } else if let Some(r) = rd.to_f64() {
+                            return Ok(Value::Float(r));
+                        }
+                    }
+                    let res = *a / *b as f64;
+                    Ok(Value::Float(res))
+                }
+                (a, b) => Err(EvalError::TypeError(format!(
+                    "Division undefined for operands {:?} and {:?}",
+                    a, b
+                ))),
+            },
+            BinOp::Modulo => match (left, right) {
+                (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a % b)),
+                (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a % b)),
+                (Value::Integer(a), Value::Float(b)) => {
+                    if let Some(ad) = Decimal::from_i64(*a)
+                        && let Some(bd) = Decimal::from_f64(*b)
+                    {
+                        let rd = ad % bd;
+                        if rd.is_integer() &&
+                            let Some(r) = rd.to_i64() {
+                            return Ok(Value::Integer(r));
+                        } else if let Some(r) = rd.to_f64() {
+                            return Ok(Value::Float(r));
+                        }
+                    }
+                    let res = *a as f64 % b;
+                    Ok(Value::Float(res))
+                }
+                (Value::Float(a), Value::Integer(b)) => {
+                    if let Some(ad) = Decimal::from_f64(*a)
+                        && let Some(bd) = Decimal::from_i64(*b)
+                    {
+                        let rd = ad % bd;
+                        if rd.is_integer() &&
+                            let Some(r) = rd.to_i64() {
+                            return Ok(Value::Integer(r));
+                        } else if let Some(r) = rd.to_f64() {
+                            return Ok(Value::Float(r));
+                        }
+                    }
+                    let res = *a % *b as f64;
+                    Ok(Value::Float(res))
+                }
+                (a, b) => Err(EvalError::TypeError(format!(
+                    "Modulo undefined for operands {:?} and {:?}",
+                    a, b
+                ))),
+            },
+            BinOp::Equal => Ok(Value::Boolean(left == right)),
+            BinOp::NotEqual => Ok(Value::Boolean(left != right)),
+            BinOp::LessThan => match (left, right) {
+                (Value::Float(a), Value::Float(b)) => Ok(Value::Boolean(a < b)),
+                (Value::Integer(a), Value::Integer(b)) => Ok(Value::Boolean(a < b)),
+                (Value::Integer(a), Value::Float(b)) => Ok(Value::Boolean((*a as f64) < *b)),
+                (Value::Float(a), Value::Integer(b)) => Ok(Value::Boolean(*a < (*b as f64))),
+                (a, b) => Err(EvalError::TypeError(format!(
+                    "`<` comparison operation undefined for operands {:?} and {:?}",
+                    a, b
+                ))),
+            },
+            BinOp::GreaterThan => match (left, right) {
+                (Value::Float(a), Value::Float(b)) => Ok(Value::Boolean(a > b)),
+                (Value::Integer(a), Value::Integer(b)) => Ok(Value::Boolean(a > b)),
+                (Value::Integer(a), Value::Float(b)) => Ok(Value::Boolean(*a as f64 > *b)),
+                (Value::Float(a), Value::Integer(b)) => Ok(Value::Boolean(*a > *b as f64)),
+                (a, b) => Err(EvalError::TypeError(format!(
+                    "`>` comparison operation undefined for operands {:?} and {:?}",
+                    a, b
+                ))),
+            },
+            BinOp::LessEqual => match (left, right) {
+                (Value::Float(a), Value::Float(b)) => Ok(Value::Boolean(a <= b)),
+                (Value::Integer(a), Value::Integer(b)) => Ok(Value::Boolean(a <= b)),
+                (Value::Integer(a), Value::Float(b)) => Ok(Value::Boolean(*a as f64 <= *b)),
+                (Value::Float(a), Value::Integer(b)) => Ok(Value::Boolean(*a <= *b as f64)),
+                (a, b) => Err(EvalError::TypeError(format!(
+                    "`<=` comparison operation undefined for operands {:?} and {:?}",
+                    a, b
+                ))),
+            },
+            BinOp::GreaterEqual => match (left, right) {
+                (Value::Float(a), Value::Float(b)) => Ok(Value::Boolean(a >= b)),
+                (Value::Integer(a), Value::Integer(b)) => Ok(Value::Boolean(a >= b)),
+                (Value::Integer(a), Value::Float(b)) => Ok(Value::Boolean(*a as f64 >= *b)),
+                (Value::Float(a), Value::Integer(b)) => Ok(Value::Boolean(*a >= *b as f64)),
+                (a, b) => Err(EvalError::TypeError(format!(
+                    "`>=` comparison operation undefined for operands {:?} and {:?}",
+                    a, b
+                ))),
+            },
+            BinOp::And => Ok(Value::Boolean(left.as_bool() && right.as_bool())),
+            BinOp::Or => Ok(Value::Boolean(left.as_bool() || right.as_bool())),
+        }
+    }
+    /// Apply transform (complex - we'll implement this next)
+    fn apply_transform(
+        &mut self,
+        ctx: &EvalContext,
+        target: &Expr,
+        value_expr: &Expr,
+    ) -> Result<Value, EvalError> {
+        let path = extract_path(target)?;
+
+        // if path.is_empty() {
+        //     return Err(EvalError::TypeError(
+        //         "Cannot transform root directly. Use a specific field path or use literal object for output".to_string(),
+        //     ));
+        // }
+
+        let transform_type = determine_transform_type(value_expr);
+
+        let mut result = ctx.root.clone();
+
+        self.apply_transform_at_path(&mut result, &path, transform_type, ctx)?;
+
+        Ok(result)
+    }
+
+    fn apply_transform_at_path(
+        &mut self,
+        current: &mut Value,
+        path: &[PathSegment],
+        transform: TransformType,
+        ctx: &EvalContext,
+    ) -> Result<(), EvalError> {
+        if path.is_empty() {
+            return Err(EvalError::TypeError(
+                "Internal error: empty path in apply_transform_at_path".into(),
+            ));
+        }
+
+        if path.len() == 1 {
+            return self.apply_transform_to_parent(current, &path[0], transform, ctx);
+        }
+
+        let segment = &path[0];
+
+        let rest = &path[1..];
+
+        match (current, segment) {
+            (Value::Object(map), PathSegment::Field(key)) => {
+                let child = map
+                    .get_mut(key)
+                    .ok_or_else(|| EvalError::AccessError(format!("Field '{}' not found", key)))?;
+
+                self.apply_transform_at_path(child, rest, transform, ctx)?;
+                Ok(())
+            }
+            (Value::Array(arr), PathSegment::Index(idx)) => {
+                let len = arr.len();
+                let index = if *idx >= 0 {
+                    *idx as usize
+                } else if idx.unsigned_abs() < (len as u64) {
+                    len - idx.unsigned_abs() as usize
+                } else {
+                    return Err(EvalError::AccessError(format!("Cannot access array element at {} for array with length {}", idx, len)))
+                };
+                let child = arr.get_mut(index).ok_or_else(|| {
+                    EvalError::AccessError(format!(
+                        "Array index {} out of bounds (length: {})",
+                        idx, len,
+                    ))
+                })?;
+                self.apply_transform_at_path(child, rest, transform, ctx)?;
+                Ok(())
+            }
+
+            (Value::Array(_), PathSegment::Field(_)) => Err(EvalError::TypeError(
+                "Cannot use field name on array".into(),
+            )),
+
+            (v, p) => Err(EvalError::TypeError(format!(
+                "Cannot navigate through {:?} with {:?}",
+                v, p
+            ))),
+        }
+    }
+
+    fn apply_transform_to_parent(
+        &mut self,
+        parent: &mut Value,
+        segment: &PathSegment,
+        transform: TransformType,
+        ctx: &EvalContext,
+    ) -> Result<(), EvalError> {
+        match (parent, segment) {
+            (Value::Object(map), PathSegment::Field(key)) => match transform {
+                TransformType::Replace(expr) => {
+                    let new_value = self.eval_expr(&expr, ctx)?;
+                    map.insert(key.clone(), new_value);
+                    Ok(())
+                }
+                TransformType::FilterArray(cond) => {
+                    let arr = map.get(key).ok_or_else(|| {
+                        EvalError::AccessError(format!("Field '{}' not found", key))
+                    })?;
+
+                    match arr {
+                        Value::Array(items) => {
+                            let filtered = self.filter_array(items, &cond, ctx)?;
+                            map.insert(key.clone(), Value::Array(filtered));
+                            Ok(())
+                        }
+                        _ => Err(EvalError::TypeError(format!(
+                            "Filter transform requires array but '{}' is {:?}",
+                            key, arr
+                        ))),
+                    }
+                }
+                TransformType::MapArray(expr) => {
+                    let arr = map.get(key).ok_or_else(|| {
+                        EvalError::AccessError(format!("Field '{}' not found", key))
+                    })?;
+
+                    match arr {
+                        Value::Array(items) => {
+                            let mapped = self.map_array(items, &expr, ctx)?;
+                            map.insert(key.clone(), Value::Array(mapped));
+                            Ok(())
+                        }
+                        _ => Err(EvalError::TypeError(format!(
+                            "Map transform requires array, but '{}' is {:?}",
+                            key, arr
+                        ))),
+                    }
+                }
+            },
+            (Value::Array(arr), PathSegment::Index(idx)) => match transform {
+                TransformType::Replace(expr) => {
+                    let len = arr.len();
+                    let index = if *idx >= 0 {
+                        *idx as usize
+                    } else {
+                        len - idx.unsigned_abs() as usize
+                    };
+
+                    let new_val = self.eval_expr(&expr, ctx)?;
+                    arr[index] = new_val;
+                    Ok(())
+                }
+                TransformType::FilterArray(_) | TransformType::MapArray(_) => {
+                    Err(EvalError::TypeError("Cannot filter/map on array index. Use a field instead (e.g., $[items] not $[items][0])".into()))
+                }
+            },
+
+            (Value::Object(_), PathSegment::Index(_)) => {
+                Err(EvalError::TypeError(
+                        "Cannot use array index on object".into()
+                ))
+            }
+
+            (Value::Array(_), PathSegment::Field(_)) => {
+                Err(EvalError::TypeError(
+                        "Cannot use array index on object".into()
+                ))
+            }
+
+            _ => {
+                Err(EvalError::TypeError(
+                        "Invalid parent type for transform.".to_string()
+                ))
+            }
+        }
+    }
+
+    fn filter_array(
+        &mut self,
+        items: &[Value],
+        condition: &Expr,
+        ctx: &EvalContext,
+    ) -> Result<Vec<Value>, EvalError> {
+        let mut result = Vec::new();
+
+        for item in items {
+            let lambda_ctx = ctx.with_lambda(item.clone());
+
+            let keep = self.eval_expr(condition, &lambda_ctx)?;
+
+            if keep.as_bool() {
+                result.push(item.clone());
+            }
+        }
+
+        Ok(result)
+    }
+
+    fn map_array(
+        &mut self,
+        items: &[Value],
+        expr: &Expr,
+        ctx: &EvalContext,
+    ) -> Result<Vec<Value>, EvalError> {
+        let mut result = Vec::new();
+
+        for item in items {
+            let lambda_ctx = ctx.with_lambda(item.clone());
+
+            let new_value = self.eval_expr(expr, &lambda_ctx)?;
+
+            result.push(new_value);
+        }
+
+        Ok(result)
+    }
+}

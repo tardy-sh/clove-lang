@@ -1,0 +1,157 @@
+(* ===================================================================
+   JSON Query Language Grammar (EBNF)
+   =================================================================== *)
+
+(* Entry Point *)
+query = { udf_definition } , pipeline ;
+
+pipeline = root , { "|" , statement } , [ "|" , output ] ;
+
+(* UDF Definitions *)
+udf_definition = "&" , identifier , "," , arity , ":=" , operation , newline ;
+arity = digit , { digit } ;
+
+(* Statements *)
+statement = scope_definition
+          | existence_check
+          | filter_stmt
+          | transform_stmt
+          | access ;
+
+scope_definition = scope_ref , ":=" , access ;
+
+existence_check = access , "[?]" ;
+
+filter_stmt = "?" , "(" , condition , ")" ;
+
+transform_stmt = "~" , "(" , assignment , ")" ;
+
+assignment = access , ":=" , transform_rhs ;
+
+transform_rhs = filter_expr      (* ?(...) → filter array *)
+              | map_expr         (* expression with @ → map array *)
+              | literal_expr ;   (* literal value → replace *)
+
+filter_expr = "?" , "(" , condition , ")" ;
+
+map_expr = expression ;  (* Must contain @ or be a method call *)
+
+output = "!" , "(" , output_expr , ")" ;
+
+output_expr = access
+            | object_literal
+            | array_literal ;
+
+(* Conditions - Boolean Logic *)
+condition = or_condition ;
+
+or_condition = and_condition , { "or" , and_condition } ;
+
+and_condition = comparison , { "and" , comparison } ;
+
+comparison = expression , [ comparison_op , expression ] ;
+
+comparison_op = "==" | "!=" | "<" | ">" | "<=" | ">=" ;
+
+(* Expressions *)
+expression = arithmetic_expr ;
+
+arithmetic_expr = term , { additive_op , term } ;
+additive_op = "+" | "-" ;
+
+term = factor , { multiplicative_op , factor } ;
+multiplicative_op = "*" | "/" | "%" ;
+
+factor = access_expr
+       | literal
+       | "(" , expression , ")" ;
+
+access_expr = root , { accessor } , [ method_chain ] ;
+
+method_chain = method_call , { method_call } ;
+
+method_call = "." , method_name , "(" , [ method_args ] , ")" ;
+
+method_name = "any" | "all" | "filter" | "map" | "sum" | "count" 
+            | "exists" | "first" | "last" | "unique" | "sort" ;
+
+method_args = lambda_expr
+            | expression , { "," , expression } ;
+
+lambda_expr = lambda_param , expression ;
+
+lambda_param = "@" ;  (* Bare @ in lambda context *)
+
+(* Access Patterns *)
+root = "$"                    (* document root *)
+     | scope_ref              (* @name - scope reference *)
+     | lambda_param           (* @ - in lambda/transform *)
+     | arg_ref                (* @N - UDF argument *)
+     | udf_call ;             (* &name[args] - UDF call *)
+
+scope_ref = "@" , identifier ;
+
+arg_ref = "@" , digit , { digit } ;
+
+udf_call = "&" , identifier , "[" , udf_args , "]" ;
+
+udf_args = expression , { "," , expression } ;
+
+accessor = bracket_accessor | dot_accessor ;
+
+bracket_accessor = "[" , accessor_key , "]" ;
+
+accessor_key = identifier          (* key name *)
+             | integer             (* array index *)
+             | "?"                 (* existence check *)
+             | expression ;        (* computed key *)
+
+dot_accessor = "." , identifier ;
+
+(* Literals *)
+literal = number | string | boolean | null ;
+
+number = integer | float ;
+
+integer = [ "-" ] , digit , { digit } ;
+
+float = [ "-" ] , digit , { digit } , "." , digit , { digit } ;
+
+string = '"' , { string_char } , '"' ;
+
+string_char = ? any character except " and \ ?
+            | "\\" , escape_char ;
+
+escape_char = '"' | "\\" | "n" | "r" | "t" ;
+
+boolean = "true" | "false" ;
+
+null = "null" ;
+
+(* Object and Array Literals *)
+object_literal = "{" , [ object_pairs ] , "}" ;
+
+object_pairs = object_pair , { "," , object_pair } ;
+
+object_pair = string , ":" , expression ;
+
+array_literal = "[" , [ array_elements ] , "]" ;
+
+array_elements = expression , { "," , expression } ;
+
+(* Identifiers and Primitives *)
+identifier = ( letter | "_" ) , { letter | digit | "_" } ;
+
+letter = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" 
+       | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" 
+       | "u" | "v" | "w" | "x" | "y" | "z"
+       | "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" 
+       | "K" | "L" | "M" | "N" | "O" | "P" | "Q" | "R" | "S" | "T" 
+       | "U" | "V" | "W" | "X" | "Y" | "Z" ;
+
+digit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+
+newline = "\n" | "\r\n" ;
+
+(* Whitespace - ignored except in strings *)
+whitespace = " " | "\t" | "\n" | "\r" ;

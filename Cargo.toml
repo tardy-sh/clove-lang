@@ -1,0 +1,16 @@
+[package]
+name = "clove-lang"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "A JSON query language for filtering, transforming, and validating JSON documents"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+rust_decimal = "1.39"
+
+
