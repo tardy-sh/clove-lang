@@ -42,7 +42,7 @@ pub struct Evaluator {
 }
 
 /// Errors that can occur during query evaluation.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum EvalError {
     /// Type mismatch or invalid operation for the given type
     TypeError(String),
@@ -58,6 +58,33 @@ pub enum EvalError {
 
     /// Division by zero
     DivisionByZero,
+}
+
+impl std::fmt::Display for EvalError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EvalError::TypeError(msg) => write!(f, "Type error: {}", msg),
+            EvalError::AccessError(msg) => write!(f, "Access error: {}", msg),
+            EvalError::UndefinedScope(name) => write!(f, "Undefined scope: @{} is not defined", name),
+            EvalError::UndefinedEnvVar(name) => write!(f, "Undefined environment variable: ${}", name),
+            EvalError::DivisionByZero => write!(f, "Division by zero"),
+        }
+    }
+}
+
+impl std::error::Error for EvalError {}
+
+/// Returns a human-readable type name for a Value
+fn type_name(v: &Value) -> &'static str {
+    match v {
+        Value::Null => "null",
+        Value::Boolean(_) => "boolean",
+        Value::Integer(_) => "integer",
+        Value::Float(_) => "float",
+        Value::String(_) => "string",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
+    }
 }
 
 impl Evaluator {
@@ -268,9 +295,18 @@ impl Evaluator {
                 let index = *n as usize;
                 Ok(arr.get(index).cloned().unwrap_or(Value::Null))
             }
+            (Value::Array(_), Value::String(k)) => Err(EvalError::TypeError(format!(
+                "Cannot use string key '{}' on array; use integer index instead",
+                k
+            ))),
+            (v, Value::Integer(_)) => Err(EvalError::TypeError(format!(
+                "Cannot use integer index on {}; only arrays support integer indexing",
+                type_name(v)
+            ))),
             _ => Err(EvalError::TypeError(format!(
-                "Cannot access {:?} with key {:?}",
-                object, key
+                "Cannot access {} with {} key",
+                type_name(object),
+                type_name(key)
             ))),
         }
     }
@@ -312,8 +348,8 @@ impl Evaluator {
                 }
                 (Value::String(a), Value::String(b)) => Ok(Value::String(format!("{}{}", a, b))),
                 (a, b) => Err(EvalError::TypeError(format!(
-                    "Addition undefined for operands {:?} and {:?}",
-                    a, b
+                    "Cannot add {} and {}",
+                    type_name(a), type_name(b)
                 ))),
             },
             BinOp::Subtract => match (left, right) {
@@ -350,8 +386,8 @@ impl Evaluator {
                     Ok(Value::Float(res))
                 }
                 (a, b) => Err(EvalError::TypeError(format!(
-                    "Subtraction undefined for operands {:?} and {:?}",
-                    a, b
+                    "Cannot subtract {} from {}",
+                    type_name(b), type_name(a)
                 ))),
             },
 
@@ -389,8 +425,8 @@ impl Evaluator {
                     Ok(Value::Float(res))
                 }
                 (a, b) => Err(EvalError::TypeError(format!(
-                    "Multiplication undefined for operands {:?} and {:?}",
-                    a, b
+                    "Cannot multiply {} by {}",
+                    type_name(a), type_name(b)
                 ))),
             },
             BinOp::Divide => match (left, right) {
@@ -427,8 +463,8 @@ impl Evaluator {
                     Ok(Value::Float(res))
                 }
                 (a, b) => Err(EvalError::TypeError(format!(
-                    "Division undefined for operands {:?} and {:?}",
-                    a, b
+                    "Cannot divide {} by {}",
+                    type_name(a), type_name(b)
                 ))),
             },
             BinOp::Modulo => match (left, right) {
@@ -465,8 +501,8 @@ impl Evaluator {
                     Ok(Value::Float(res))
                 }
                 (a, b) => Err(EvalError::TypeError(format!(
-                    "Modulo undefined for operands {:?} and {:?}",
-                    a, b
+                    "Cannot compute modulo of {} by {}",
+                    type_name(a), type_name(b)
                 ))),
             },
             BinOp::Equal => Ok(Value::Boolean(left == right)),
@@ -477,8 +513,8 @@ impl Evaluator {
                 (Value::Integer(a), Value::Float(b)) => Ok(Value::Boolean((*a as f64) < *b)),
                 (Value::Float(a), Value::Integer(b)) => Ok(Value::Boolean(*a < (*b as f64))),
                 (a, b) => Err(EvalError::TypeError(format!(
-                    "`<` comparison operation undefined for operands {:?} and {:?}",
-                    a, b
+                    "Cannot compare {} < {} (comparison requires numeric types)",
+                    type_name(a), type_name(b)
                 ))),
             },
             BinOp::GreaterThan => match (left, right) {
@@ -487,8 +523,8 @@ impl Evaluator {
                 (Value::Integer(a), Value::Float(b)) => Ok(Value::Boolean(*a as f64 > *b)),
                 (Value::Float(a), Value::Integer(b)) => Ok(Value::Boolean(*a > *b as f64)),
                 (a, b) => Err(EvalError::TypeError(format!(
-                    "`>` comparison operation undefined for operands {:?} and {:?}",
-                    a, b
+                    "Cannot compare {} > {} (comparison requires numeric types)",
+                    type_name(a), type_name(b)
                 ))),
             },
             BinOp::LessEqual => match (left, right) {
@@ -497,8 +533,8 @@ impl Evaluator {
                 (Value::Integer(a), Value::Float(b)) => Ok(Value::Boolean(*a as f64 <= *b)),
                 (Value::Float(a), Value::Integer(b)) => Ok(Value::Boolean(*a <= *b as f64)),
                 (a, b) => Err(EvalError::TypeError(format!(
-                    "`<=` comparison operation undefined for operands {:?} and {:?}",
-                    a, b
+                    "Cannot compare {} <= {} (comparison requires numeric types)",
+                    type_name(a), type_name(b)
                 ))),
             },
             BinOp::GreaterEqual => match (left, right) {
@@ -507,8 +543,8 @@ impl Evaluator {
                 (Value::Integer(a), Value::Float(b)) => Ok(Value::Boolean(*a as f64 >= *b)),
                 (Value::Float(a), Value::Integer(b)) => Ok(Value::Boolean(*a >= *b as f64)),
                 (a, b) => Err(EvalError::TypeError(format!(
-                    "`>=` comparison operation undefined for operands {:?} and {:?}",
-                    a, b
+                    "Cannot compare {} >= {} (comparison requires numeric types)",
+                    type_name(a), type_name(b)
                 ))),
             },
             BinOp::And => Ok(Value::Boolean(left.as_bool() && right.as_bool())),
@@ -593,8 +629,8 @@ impl Evaluator {
             )),
 
             (v, p) => Err(EvalError::TypeError(format!(
-                "Cannot navigate through {:?} with {:?}",
-                v, p
+                "Cannot navigate through {} with path segment {:?}",
+                type_name(v), p
             ))),
         }
     }
@@ -625,8 +661,8 @@ impl Evaluator {
                             Ok(())
                         }
                         _ => Err(EvalError::TypeError(format!(
-                            "Filter transform requires array but '{}' is {:?}",
-                            key, arr
+                            "Filter transform requires array, but '{}' is {}",
+                            key, type_name(arr)
                         ))),
                     }
                 }
@@ -642,8 +678,8 @@ impl Evaluator {
                             Ok(())
                         }
                         _ => Err(EvalError::TypeError(format!(
-                            "Map transform requires array, but '{}' is {:?}",
-                            key, arr
+                            "Map transform requires array, but '{}' is {}",
+                            key, type_name(arr)
                         ))),
                     }
                 }
@@ -773,8 +809,8 @@ impl Evaluator {
             Value::Array(arr) => arr,
             _ => {
                 return Err(EvalError::TypeError(format!(
-                    ".any() requires array, got {:?}",
-                    object
+                    ".any() requires array, got {}",
+                    type_name(object)
                 )))
             }
         };
@@ -809,8 +845,8 @@ impl Evaluator {
             Value::Array(arr) => arr,
             _ => {
                 return Err(EvalError::TypeError(format!(
-                    ".all() requires array, got {:?}",
-                    object
+                    ".all() requires array, got {}",
+                    type_name(object)
                 )))
             }
         };
@@ -845,8 +881,8 @@ impl Evaluator {
             Value::Array(arr) => arr,
             _ => {
                 return Err(EvalError::TypeError(format!(
-                    ".filter() requires array, got {:?}",
-                    object
+                    ".filter() requires array, got {}",
+                    type_name(object)
                 )))
             }
         };
@@ -874,8 +910,8 @@ impl Evaluator {
             Value::Array(arr) => arr,
             _ => {
                 return Err(EvalError::TypeError(format!(
-                    ".map() requires array, got {:?}",
-                    object
+                    ".map() requires array, got {}",
+                    type_name(object)
                 )))
             }
         };
@@ -897,8 +933,8 @@ impl Evaluator {
         match object {
             Value::Array(arr) => Ok(Value::Integer(arr.len() as i64)),
             _ => Err(EvalError::TypeError(format!(
-                ".count() requires array, got {:?}",
-                object
+                ".count() requires array, got {}",
+                type_name(object)
             ))),
         }
     }
@@ -914,8 +950,8 @@ impl Evaluator {
             Value::Array(arr) => arr,
             _ => {
                 return Err(EvalError::TypeError(format!(
-                    ".sum() requires array, got {:?}",
-                    object
+                    ".sum() requires array, got {}",
+                    type_name(object)
                 )))
             }
         };
@@ -949,8 +985,8 @@ impl Evaluator {
                 }
                 _ => {
                     return Err(EvalError::TypeError(format!(
-                        ".sum() requires numeric values, got {:?}",
-                        value
+                        ".sum() requires numeric values, got {}",
+                        type_name(&value)
                     )))
                 }
             }
@@ -968,8 +1004,8 @@ impl Evaluator {
         match object {
             Value::Array(arr) => Ok(arr.first().cloned().unwrap_or(Value::Null)),
             _ => Err(EvalError::TypeError(format!(
-                ".first() requires array, got {:?}",
-                object
+                ".first() requires array, got {}",
+                type_name(object)
             ))),
         }
     }
@@ -979,8 +1015,8 @@ impl Evaluator {
         match object {
             Value::Array(arr) => Ok(arr.last().cloned().unwrap_or(Value::Null)),
             _ => Err(EvalError::TypeError(format!(
-                ".last() requires array, got {:?}",
-                object
+                ".last() requires array, got {}",
+                type_name(object)
             ))),
         }
     }
@@ -991,8 +1027,8 @@ impl Evaluator {
             Value::Array(arr) => Ok(Value::Boolean(!arr.is_empty())),
             Value::Null => Ok(Value::Boolean(false)),
             _ => Err(EvalError::TypeError(format!(
-                ".exists() requires array, got {:?}",
-                object
+                ".exists() requires array, got {}",
+                type_name(object)
             ))),
         }
     }
@@ -1003,8 +1039,8 @@ impl Evaluator {
             Value::Array(arr) => arr,
             _ => {
                 return Err(EvalError::TypeError(format!(
-                    ".unique() requires array, got {:?}",
-                    object
+                    ".unique() requires array, got {}",
+                    type_name(object)
                 )))
             }
         };
@@ -1030,8 +1066,8 @@ impl Evaluator {
             Value::Array(arr) => arr.clone(),
             _ => {
                 return Err(EvalError::TypeError(format!(
-                    ".sort() requires array, got {:?}",
-                    object
+                    ".sort() requires array, got {}",
+                    type_name(object)
                 )))
             }
         };
@@ -1082,8 +1118,8 @@ impl Evaluator {
         match object {
             Value::String(s) => Ok(Value::String(s.to_uppercase())),
             _ => Err(EvalError::TypeError(format!(
-                ".upper() requires string, got {:?}",
-                object
+                ".upper() requires string, got {}",
+                type_name(object)
             ))),
         }
     }
@@ -1093,8 +1129,8 @@ impl Evaluator {
         match object {
             Value::String(s) => Ok(Value::String(s.to_lowercase())),
             _ => Err(EvalError::TypeError(format!(
-                ".lower() requires string, got {:?}",
-                object
+                ".lower() requires string, got {}",
+                type_name(object)
             ))),
         }
     }
@@ -1110,8 +1146,8 @@ impl Evaluator {
             Value::String(s) => s,
             _ => {
                 return Err(EvalError::TypeError(format!(
-                    ".contains() requires string, got {:?}",
-                    object
+                    ".contains() requires string, got {}",
+                    type_name(object)
                 )))
             }
         };
@@ -1126,8 +1162,8 @@ impl Evaluator {
         match substr {
             Value::String(sub) => Ok(Value::Boolean(s.contains(&sub))),
             _ => Err(EvalError::TypeError(format!(
-                ".contains() argument must be string, got {:?}",
-                substr
+                ".contains() argument must be string, got {}",
+                type_name(&substr)
             ))),
         }
     }
@@ -1143,8 +1179,8 @@ impl Evaluator {
             Value::String(s) => s,
             _ => {
                 return Err(EvalError::TypeError(format!(
-                    ".startswith() requires string, got {:?}",
-                    object
+                    ".startswith() requires string, got {}",
+                    type_name(object)
                 )))
             }
         };
@@ -1159,8 +1195,8 @@ impl Evaluator {
         match prefix {
             Value::String(p) => Ok(Value::Boolean(s.starts_with(&p))),
             _ => Err(EvalError::TypeError(format!(
-                ".startswith() argument must be string, got {:?}",
-                prefix
+                ".startswith() argument must be string, got {}",
+                type_name(&prefix)
             ))),
         }
     }
@@ -1176,8 +1212,8 @@ impl Evaluator {
             Value::String(s) => s,
             _ => {
                 return Err(EvalError::TypeError(format!(
-                    ".endswith() requires string, got {:?}",
-                    object
+                    ".endswith() requires string, got {}",
+                    type_name(object)
                 )))
             }
         };
@@ -1192,8 +1228,8 @@ impl Evaluator {
         match suffix {
             Value::String(suf) => Ok(Value::Boolean(s.ends_with(&suf))),
             _ => Err(EvalError::TypeError(format!(
-                ".endswith() argument must be string, got {:?}",
-                suffix
+                ".endswith() argument must be string, got {}",
+                type_name(&suffix)
             ))),
         }
     }
