@@ -747,6 +747,14 @@ impl Evaluator {
             "exists" => self.method_exists(object),
             "unique" => self.method_unique(object),
             "sort" => self.method_sort(object, args, ctx),
+            // String methods
+            "upper" => self.method_upper(object),
+            "lower" => self.method_lower(object),
+            "contains" => self.method_contains(object, args, ctx),
+            "startswith" => self.method_startswith(object, args, ctx),
+            "endswith" => self.method_endswith(object, args, ctx),
+            // Type method (works on any value)
+            "type" => self.method_type(object),
             _ => Err(EvalError::TypeError(format!(
                 "Unknown method: {}",
                 method
@@ -1063,5 +1071,148 @@ impl Evaluator {
             (Value::Boolean(a), Value::Boolean(b)) => a.cmp(b),
             _ => std::cmp::Ordering::Equal,
         }
+    }
+
+    // ========================================
+    // String Methods
+    // ========================================
+
+    /// .upper() - converts string to uppercase
+    fn method_upper(&self, object: &Value) -> Result<Value, EvalError> {
+        match object {
+            Value::String(s) => Ok(Value::String(s.to_uppercase())),
+            _ => Err(EvalError::TypeError(format!(
+                ".upper() requires string, got {:?}",
+                object
+            ))),
+        }
+    }
+
+    /// .lower() - converts string to lowercase
+    fn method_lower(&self, object: &Value) -> Result<Value, EvalError> {
+        match object {
+            Value::String(s) => Ok(Value::String(s.to_lowercase())),
+            _ => Err(EvalError::TypeError(format!(
+                ".lower() requires string, got {:?}",
+                object
+            ))),
+        }
+    }
+
+    /// .contains(substring) - returns true if string contains substring
+    fn method_contains(
+        &self,
+        object: &Value,
+        args: &[Expr],
+        ctx: &EvalContext,
+    ) -> Result<Value, EvalError> {
+        let s = match object {
+            Value::String(s) => s,
+            _ => {
+                return Err(EvalError::TypeError(format!(
+                    ".contains() requires string, got {:?}",
+                    object
+                )))
+            }
+        };
+
+        if args.is_empty() {
+            return Err(EvalError::TypeError(
+                ".contains() requires a substring argument".to_string(),
+            ));
+        }
+
+        let substr = self.eval_expr(&args[0], ctx)?;
+        match substr {
+            Value::String(sub) => Ok(Value::Boolean(s.contains(&sub))),
+            _ => Err(EvalError::TypeError(format!(
+                ".contains() argument must be string, got {:?}",
+                substr
+            ))),
+        }
+    }
+
+    /// .startswith(prefix) - returns true if string starts with prefix
+    fn method_startswith(
+        &self,
+        object: &Value,
+        args: &[Expr],
+        ctx: &EvalContext,
+    ) -> Result<Value, EvalError> {
+        let s = match object {
+            Value::String(s) => s,
+            _ => {
+                return Err(EvalError::TypeError(format!(
+                    ".startswith() requires string, got {:?}",
+                    object
+                )))
+            }
+        };
+
+        if args.is_empty() {
+            return Err(EvalError::TypeError(
+                ".startswith() requires a prefix argument".to_string(),
+            ));
+        }
+
+        let prefix = self.eval_expr(&args[0], ctx)?;
+        match prefix {
+            Value::String(p) => Ok(Value::Boolean(s.starts_with(&p))),
+            _ => Err(EvalError::TypeError(format!(
+                ".startswith() argument must be string, got {:?}",
+                prefix
+            ))),
+        }
+    }
+
+    /// .endswith(suffix) - returns true if string ends with suffix
+    fn method_endswith(
+        &self,
+        object: &Value,
+        args: &[Expr],
+        ctx: &EvalContext,
+    ) -> Result<Value, EvalError> {
+        let s = match object {
+            Value::String(s) => s,
+            _ => {
+                return Err(EvalError::TypeError(format!(
+                    ".endswith() requires string, got {:?}",
+                    object
+                )))
+            }
+        };
+
+        if args.is_empty() {
+            return Err(EvalError::TypeError(
+                ".endswith() requires a suffix argument".to_string(),
+            ));
+        }
+
+        let suffix = self.eval_expr(&args[0], ctx)?;
+        match suffix {
+            Value::String(suf) => Ok(Value::Boolean(s.ends_with(&suf))),
+            _ => Err(EvalError::TypeError(format!(
+                ".endswith() argument must be string, got {:?}",
+                suffix
+            ))),
+        }
+    }
+
+    // ========================================
+    // Type Method
+    // ========================================
+
+    /// .type() - returns the type name as a string
+    fn method_type(&self, object: &Value) -> Result<Value, EvalError> {
+        let type_name = match object {
+            Value::Null => "null",
+            Value::Boolean(_) => "boolean",
+            Value::Integer(_) => "number",
+            Value::Float(_) => "number",
+            Value::String(_) => "string",
+            Value::Array(_) => "array",
+            Value::Object(_) => "object",
+        };
+        Ok(Value::String(type_name.to_string()))
     }
 }

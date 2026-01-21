@@ -1065,3 +1065,188 @@ fn test_method_in_query_pipeline() {
         _ => panic!("Expected object or null"),
     }
 }
+
+// ============================================
+// String Method Tests
+// ============================================
+
+#[test]
+fn test_method_upper() {
+    let doc = json_object(vec![
+        ("name", Value::String("hello world".into())),
+    ]);
+
+    let result = eval_expr("$[name].upper()", doc).unwrap();
+    assert_eq!(result, Value::String("HELLO WORLD".into()));
+}
+
+#[test]
+fn test_method_lower() {
+    let doc = json_object(vec![
+        ("name", Value::String("HELLO WORLD".into())),
+    ]);
+
+    let result = eval_expr("$[name].lower()", doc).unwrap();
+    assert_eq!(result, Value::String("hello world".into()));
+}
+
+#[test]
+fn test_method_upper_mixed_case() {
+    let doc = json_object(vec![
+        ("text", Value::String("HeLLo WoRLd".into())),
+    ]);
+
+    let result = eval_expr("$[text].upper()", doc).unwrap();
+    assert_eq!(result, Value::String("HELLO WORLD".into()));
+}
+
+#[test]
+fn test_method_contains_true() {
+    let doc = json_object(vec![
+        ("text", Value::String("hello world".into())),
+    ]);
+
+    let result = eval_expr(r#"$[text].contains("world")"#, doc).unwrap();
+    assert_eq!(result, Value::Boolean(true));
+}
+
+#[test]
+fn test_method_contains_false() {
+    let doc = json_object(vec![
+        ("text", Value::String("hello world".into())),
+    ]);
+
+    let result = eval_expr(r#"$[text].contains("foo")"#, doc).unwrap();
+    assert_eq!(result, Value::Boolean(false));
+}
+
+#[test]
+fn test_method_startswith_true() {
+    let doc = json_object(vec![
+        ("url", Value::String("https://example.com".into())),
+    ]);
+
+    let result = eval_expr(r#"$[url].startswith("https://")"#, doc).unwrap();
+    assert_eq!(result, Value::Boolean(true));
+}
+
+#[test]
+fn test_method_startswith_false() {
+    let doc = json_object(vec![
+        ("url", Value::String("http://example.com".into())),
+    ]);
+
+    let result = eval_expr(r#"$[url].startswith("https://")"#, doc).unwrap();
+    assert_eq!(result, Value::Boolean(false));
+}
+
+#[test]
+fn test_method_endswith_true() {
+    let doc = json_object(vec![
+        ("filename", Value::String("data.json".into())),
+    ]);
+
+    let result = eval_expr(r#"$[filename].endswith(".json")"#, doc).unwrap();
+    assert_eq!(result, Value::Boolean(true));
+}
+
+#[test]
+fn test_method_endswith_false() {
+    let doc = json_object(vec![
+        ("filename", Value::String("data.xml".into())),
+    ]);
+
+    let result = eval_expr(r#"$[filename].endswith(".json")"#, doc).unwrap();
+    assert_eq!(result, Value::Boolean(false));
+}
+
+// ============================================
+// Type Method Tests
+// ============================================
+
+#[test]
+fn test_method_type_string() {
+    let doc = json_object(vec![
+        ("value", Value::String("hello".into())),
+    ]);
+
+    let result = eval_expr("$[value].type()", doc).unwrap();
+    assert_eq!(result, Value::String("string".into()));
+}
+
+#[test]
+fn test_method_type_integer() {
+    let doc = json_object(vec![
+        ("value", Value::Integer(42)),
+    ]);
+
+    let result = eval_expr("$[value].type()", doc).unwrap();
+    assert_eq!(result, Value::String("number".into()));
+}
+
+#[test]
+fn test_method_type_float() {
+    let doc = json_object(vec![
+        ("value", Value::Float(3.14)),
+    ]);
+
+    let result = eval_expr("$[value].type()", doc).unwrap();
+    assert_eq!(result, Value::String("number".into()));
+}
+
+#[test]
+fn test_method_type_boolean() {
+    let doc = json_object(vec![
+        ("value", Value::Boolean(true)),
+    ]);
+
+    let result = eval_expr("$[value].type()", doc).unwrap();
+    assert_eq!(result, Value::String("boolean".into()));
+}
+
+#[test]
+fn test_method_type_null() {
+    let doc = json_object(vec![
+        ("value", Value::Null),
+    ]);
+
+    let result = eval_expr("$[value].type()", doc).unwrap();
+    assert_eq!(result, Value::String("null".into()));
+}
+
+#[test]
+fn test_method_type_array() {
+    let doc = json_object(vec![
+        ("value", json_array(vec![Value::Integer(1), Value::Integer(2)])),
+    ]);
+
+    let result = eval_expr("$[value].type()", doc).unwrap();
+    assert_eq!(result, Value::String("array".into()));
+}
+
+#[test]
+fn test_method_type_object() {
+    let doc = json_object(vec![
+        ("value", json_object(vec![("nested", Value::Integer(1))])),
+    ]);
+
+    let result = eval_expr("$[value].type()", doc).unwrap();
+    assert_eq!(result, Value::String("object".into()));
+}
+
+#[test]
+fn test_string_method_in_filter() {
+    let doc = json_object(vec![
+        ("items", json_array(vec![
+            json_object(vec![("name", Value::String("apple.json".into()))]),
+            json_object(vec![("name", Value::String("banana.txt".into()))]),
+            json_object(vec![("name", Value::String("cherry.json".into()))]),
+        ])),
+    ]);
+
+    let result = eval_expr(r#"$[items].filter(@[name].endswith(".json"))"#, doc).unwrap();
+    match result {
+        Value::Array(arr) => assert_eq!(arr.len(), 2),
+        _ => panic!("Expected array"),
+    }
+}
