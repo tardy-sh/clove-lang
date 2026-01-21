@@ -115,13 +115,22 @@ Once defined, `@items` can be used anywhere in subsequent operations.
 ```
 
 ### Existence Check
+
+Two syntax forms are supported:
 ```
-$[field][?]         # True if field exists and is non-empty
+$[field][?]         # Bracket form
+$[field]?           # Postfix form (equivalent)
 ```
 
-For objects: true if exists and not null
-For arrays: true if exists and has length > 0
-For strings: true if exists and not empty
+Returns true if the value exists and is non-empty:
+- For objects: true if exists and not null
+- For arrays: true if exists and has length > 0
+- For strings: true if exists and not empty
+
+Can be used in method arguments:
+```
+$[items].filter(@[field]?)  # Keep items where field exists
+```
 
 ### Negative Array Indices
 
@@ -224,8 +233,10 @@ $ | operation1 | operation2 | operation3
 |----------|-------------|------------------------------------------|
 | `and`    | Logical AND | `$[age] > 18 and $[verified] == true`   |
 | `or`     | Logical OR  | `$[role] == "admin" or $[role] == "mod"`|
+| `&&`     | Logical AND | `$[age] > 18 && $[verified] == true`    |
+| `\|\|`   | Logical OR  | `$[role] == "admin" \|\| $[role] == "mod"`|
 
-Note: Use words `and`/`or`, not symbols `&&`/`||`.
+Both keyword (`and`/`or`) and symbol (`&&`/`||`) forms are supported.
 
 ### Arithmetic Operators
 
@@ -355,6 +366,71 @@ $[numbers].sort()
 $[items].sort(@[price])  # Sort by field
 ```
 
+#### `sort_desc()`
+
+Returns sorted array (descending).
+```
+$[numbers].sort_desc()
+```
+
+#### `length()`
+
+Returns the number of elements in an array.
+```
+$[items].length()
+```
+
+#### `min()`
+
+Returns the minimum numeric value in an array.
+```
+$[prices].min()
+```
+
+#### `max()`
+
+Returns the maximum numeric value in an array.
+```
+$[prices].max()
+```
+
+#### `avg()`
+
+Returns the average of numeric values in an array.
+```
+$[scores].avg()
+```
+
+#### `reverse()`
+
+Returns array with elements in reverse order.
+```
+$[items].reverse()
+```
+
+#### `flatten()`
+
+Flattens nested arrays one level deep.
+```
+$[nested].flatten()  # [[1,2],[3,4]] → [1,2,3,4]
+```
+
+### Object Functions
+
+#### `keys()`
+
+Returns array of object keys.
+```
+$[config].keys()
+```
+
+#### `values()`
+
+Returns array of object values.
+```
+$[config].values()
+```
+
 ### Type Functions
 
 #### `type()`
@@ -399,6 +475,27 @@ $[url].startswith("https://")
 Returns true if string ends with suffix.
 ```
 $[filename].endswith(".json")
+```
+
+#### `trim()`
+
+Removes leading and trailing whitespace.
+```
+$[input].trim()
+```
+
+#### `split(delimiter)`
+
+Splits string into array by delimiter.
+```
+$[csv].split(",")  # "a,b,c" → ["a","b","c"]
+```
+
+#### `length()` (strings)
+
+Returns the number of characters in a string.
+```
+$[name].length()
 ```
 
 ---

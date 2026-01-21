@@ -275,6 +275,10 @@ impl Parser {
                         key: Box::new(Expr::Key(name)),
                     };
                 }
+            } else if self.check(&Token::Question) {
+                // Existence check: $[field]? or @[field]?
+                self.advance()?;
+                expr = Expr::ExistenceCheck(Box::new(expr));
             } else {
                 break;
             }

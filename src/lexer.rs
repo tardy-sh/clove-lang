@@ -216,11 +216,21 @@ impl Lexer {
             }
             Some('&') => {
                 self.advance();
-                Ok(Token::Ampersand)
+                if self.current_char() == Some('&') {
+                    self.advance();
+                    Ok(Token::And)
+                } else {
+                    Ok(Token::Ampersand)
+                }
             }
             Some('|') => {
                 self.advance();
-                Ok(Token::Pipe)
+                if self.current_char() == Some('|') {
+                    self.advance();
+                    Ok(Token::Or)
+                } else {
+                    Ok(Token::Pipe)
+                }
             }
             Some('.') => {
                 self.advance();
@@ -383,4 +393,25 @@ fn test_pipe() {
     assert_eq!(lexer.next_token().unwrap(), Token::Gt);
     assert_eq!(lexer.next_token().unwrap(), Token::Integer(5));
     assert_eq!(lexer.next_token().unwrap(), Token::RParen);
+}
+
+#[test]
+fn test_logical_operators() {
+    // Test && operator
+    let mut lexer = Lexer::new("$[a] && $[b]");
+    assert_eq!(lexer.next_token().unwrap(), Token::Dollar);
+    assert_eq!(lexer.next_token().unwrap(), Token::LBracket);
+    assert_eq!(lexer.next_token().unwrap(), Token::Identifier("a".to_string()));
+    assert_eq!(lexer.next_token().unwrap(), Token::RBracket);
+    assert_eq!(lexer.next_token().unwrap(), Token::And);
+    assert_eq!(lexer.next_token().unwrap(), Token::Dollar);
+
+    // Test || operator
+    let mut lexer = Lexer::new("$[a] || $[b]");
+    assert_eq!(lexer.next_token().unwrap(), Token::Dollar);
+    assert_eq!(lexer.next_token().unwrap(), Token::LBracket);
+    assert_eq!(lexer.next_token().unwrap(), Token::Identifier("a".to_string()));
+    assert_eq!(lexer.next_token().unwrap(), Token::RBracket);
+    assert_eq!(lexer.next_token().unwrap(), Token::Or);
+    assert_eq!(lexer.next_token().unwrap(), Token::Dollar);
 }

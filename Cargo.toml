@@ -10,7 +10,14 @@ license = "MIT"
 [lib]
 path = "src/lib.rs"
 
+[[bin]]
+name = "clove"
+path = "src/main.rs"
+
 [dependencies]
+atty = "0.2"
+clap = { version = "4", features = ["derive"] }
 rust_decimal = "1.39"
+serde_json = "1"
 
 

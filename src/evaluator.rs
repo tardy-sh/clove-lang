@@ -292,7 +292,16 @@ impl Evaluator {
                 Ok(map.get(k).cloned().unwrap_or(Value::Null))
             }
             (Value::Array(arr), Value::Integer(n)) => {
-                let index = *n as usize;
+                let index = if *n < 0 {
+                    // Negative index: count from end (-1 = last, -2 = second to last)
+                    let abs_idx = (-*n) as usize;
+                    if abs_idx > arr.len() {
+                        return Ok(Value::Null);
+                    }
+                    arr.len() - abs_idx
+                } else {
+                    *n as usize
+                };
                 Ok(arr.get(index).cloned().unwrap_or(Value::Null))
             }
             (Value::Array(_), Value::String(k)) => Err(EvalError::TypeError(format!(
@@ -784,18 +793,30 @@ impl Evaluator {
             "filter" => self.method_filter(object, args, ctx),
             "map" => self.method_map(object, args, ctx),
             "count" => self.method_count(object),
+            "length" => self.method_length(object),
             "sum" => self.method_sum(object, args, ctx),
+            "min" => self.method_min(object),
+            "max" => self.method_max(object),
+            "avg" => self.method_avg(object),
             "first" => self.method_first(object),
             "last" => self.method_last(object),
             "exists" => self.method_exists(object),
             "unique" => self.method_unique(object),
             "sort" => self.method_sort(object, args, ctx),
+            "sort_desc" => self.method_sort_desc(object),
+            "reverse" => self.method_reverse(object),
+            "flatten" => self.method_flatten(object),
             // String methods
             "upper" => self.method_upper(object),
             "lower" => self.method_lower(object),
+            "trim" => self.method_trim(object),
+            "split" => self.method_split(object, args, ctx),
             "contains" => self.method_contains(object, args, ctx),
             "startswith" => self.method_startswith(object, args, ctx),
             "endswith" => self.method_endswith(object, args, ctx),
+            // Object methods
+            "keys" => self.method_keys(object),
+            "values" => self.method_values(object),
             // Type method (works on any value)
             "type" => self.method_type(object),
             _ => Err(EvalError::TypeError(format!(
@@ -1257,5 +1278,279 @@ impl Evaluator {
             Value::Object(_) => "object",
         };
         Ok(Value::String(type_name.to_string()))
+    }
+
+    // ========================================
+    // Additional Array Methods
+    // ========================================
+
+    /// .length() - returns length of array or string
+    fn method_length(&self, object: &Value) -> Result<Value, EvalError> {
+        match object {
+            Value::Array(arr) => Ok(Value::Integer(arr.len() as i64)),
+            Value::String(s) => Ok(Value::Integer(s.chars().count() as i64)),
+            _ => Err(EvalError::TypeError(format!(
+                ".length() requires array or string, got {}",
+                type_name(object)
+            ))),
+        }
+    }
+
+    /// .min() - returns minimum value in array
+    fn method_min(&self, object: &Value) -> Result<Value, EvalError> {
+        let arr = match object {
+            Value::Array(arr) => arr,
+            _ => {
+                return Err(EvalError::TypeError(format!(
+                    ".min() requires array, got {}",
+                    type_name(object)
+                )))
+            }
+        };
+
+        if arr.is_empty() {
+            return Ok(Value::Null);
+        }
+
+        let mut min: Option<&Value> = None;
+        for item in arr {
+            match (min, item) {
+                (None, v) => min = Some(v),
+                (Some(Value::Integer(a)), Value::Integer(b)) if b < a => min = Some(item),
+                (Some(Value::Float(a)), Value::Float(b)) if b < a => min = Some(item),
+                (Some(Value::Integer(a)), Value::Float(b)) if *b < (*a as f64) => min = Some(item),
+                (Some(Value::Float(a)), Value::Integer(b)) if (*b as f64) < *a => min = Some(item),
+                (Some(Value::String(a)), Value::String(b)) if b < a => min = Some(item),
+                _ => {}
+            }
+        }
+
+        Ok(min.cloned().unwrap_or(Value::Null))
+    }
+
+    /// .max() - returns maximum value in array
+    fn method_max(&self, object: &Value) -> Result<Value, EvalError> {
+        let arr = match object {
+            Value::Array(arr) => arr,
+            _ => {
+                return Err(EvalError::TypeError(format!(
+                    ".max() requires array, got {}",
+                    type_name(object)
+                )))
+            }
+        };
+
+        if arr.is_empty() {
+            return Ok(Value::Null);
+        }
+
+        let mut max: Option<&Value> = None;
+        for item in arr {
+            match (max, item) {
+                (None, v) => max = Some(v),
+                (Some(Value::Integer(a)), Value::Integer(b)) if b > a => max = Some(item),
+                (Some(Value::Float(a)), Value::Float(b)) if b > a => max = Some(item),
+                (Some(Value::Integer(a)), Value::Float(b)) if *b > (*a as f64) => max = Some(item),
+                (Some(Value::Float(a)), Value::Integer(b)) if (*b as f64) > *a => max = Some(item),
+                (Some(Value::String(a)), Value::String(b)) if b > a => max = Some(item),
+                _ => {}
+            }
+        }
+
+        Ok(max.cloned().unwrap_or(Value::Null))
+    }
+
+    /// .avg() - returns average of numeric values in array
+    fn method_avg(&self, object: &Value) -> Result<Value, EvalError> {
+        let arr = match object {
+            Value::Array(arr) => arr,
+            _ => {
+                return Err(EvalError::TypeError(format!(
+                    ".avg() requires array, got {}",
+                    type_name(object)
+                )))
+            }
+        };
+
+        if arr.is_empty() {
+            return Ok(Value::Null);
+        }
+
+        let mut sum: f64 = 0.0;
+        let mut count: usize = 0;
+
+        for item in arr {
+            match item {
+                Value::Integer(n) => {
+                    sum += *n as f64;
+                    count += 1;
+                }
+                Value::Float(n) => {
+                    sum += n;
+                    count += 1;
+                }
+                _ => {}
+            }
+        }
+
+        if count == 0 {
+            return Ok(Value::Null);
+        }
+
+        Ok(Value::Float(sum / count as f64))
+    }
+
+    /// .sort_desc() - sorts array in descending order
+    fn method_sort_desc(&self, object: &Value) -> Result<Value, EvalError> {
+        let arr = match object {
+            Value::Array(arr) => arr,
+            _ => {
+                return Err(EvalError::TypeError(format!(
+                    ".sort_desc() requires array, got {}",
+                    type_name(object)
+                )))
+            }
+        };
+
+        let mut sorted = arr.clone();
+        sorted.sort_by(|a, b| {
+            match (a, b) {
+                (Value::Integer(x), Value::Integer(y)) => y.cmp(x),
+                (Value::Float(x), Value::Float(y)) => y.partial_cmp(x).unwrap_or(std::cmp::Ordering::Equal),
+                (Value::Integer(x), Value::Float(y)) => y.partial_cmp(&(*x as f64)).unwrap_or(std::cmp::Ordering::Equal),
+                (Value::Float(x), Value::Integer(y)) => (*y as f64).partial_cmp(x).unwrap_or(std::cmp::Ordering::Equal),
+                (Value::String(x), Value::String(y)) => y.cmp(x),
+                _ => std::cmp::Ordering::Equal
+            }
+        });
+
+        Ok(Value::Array(sorted))
+    }
+
+    /// .reverse() - reverses array order
+    fn method_reverse(&self, object: &Value) -> Result<Value, EvalError> {
+        let arr = match object {
+            Value::Array(arr) => arr,
+            _ => {
+                return Err(EvalError::TypeError(format!(
+                    ".reverse() requires array, got {}",
+                    type_name(object)
+                )))
+            }
+        };
+
+        let mut reversed = arr.clone();
+        reversed.reverse();
+        Ok(Value::Array(reversed))
+    }
+
+    /// .flatten() - flattens nested arrays one level
+    fn method_flatten(&self, object: &Value) -> Result<Value, EvalError> {
+        let arr = match object {
+            Value::Array(arr) => arr,
+            _ => {
+                return Err(EvalError::TypeError(format!(
+                    ".flatten() requires array, got {}",
+                    type_name(object)
+                )))
+            }
+        };
+
+        let mut result = Vec::new();
+        for item in arr {
+            match item {
+                Value::Array(inner) => result.extend(inner.clone()),
+                other => result.push(other.clone()),
+            }
+        }
+
+        Ok(Value::Array(result))
+    }
+
+    // ========================================
+    // Additional String Methods
+    // ========================================
+
+    /// .trim() - removes leading and trailing whitespace
+    fn method_trim(&self, object: &Value) -> Result<Value, EvalError> {
+        match object {
+            Value::String(s) => Ok(Value::String(s.trim().to_string())),
+            _ => Err(EvalError::TypeError(format!(
+                ".trim() requires string, got {}",
+                type_name(object)
+            ))),
+        }
+    }
+
+    /// .split(delimiter) - splits string into array
+    fn method_split(
+        &self,
+        object: &Value,
+        args: &[Expr],
+        ctx: &EvalContext,
+    ) -> Result<Value, EvalError> {
+        let s = match object {
+            Value::String(s) => s,
+            _ => {
+                return Err(EvalError::TypeError(format!(
+                    ".split() requires string, got {}",
+                    type_name(object)
+                )))
+            }
+        };
+
+        if args.is_empty() {
+            return Err(EvalError::TypeError(
+                ".split() requires a delimiter argument".to_string(),
+            ));
+        }
+
+        let delim = self.eval_expr(&args[0], ctx)?;
+        match delim {
+            Value::String(d) => {
+                let parts: Vec<Value> = if d.is_empty() {
+                    s.chars().map(|c| Value::String(c.to_string())).collect()
+                } else {
+                    s.split(&d).map(|p| Value::String(p.to_string())).collect()
+                };
+                Ok(Value::Array(parts))
+            }
+            _ => Err(EvalError::TypeError(format!(
+                ".split() delimiter must be string, got {}",
+                type_name(&delim)
+            ))),
+        }
+    }
+
+    // ========================================
+    // Object Methods
+    // ========================================
+
+    /// .keys() - returns array of object keys
+    fn method_keys(&self, object: &Value) -> Result<Value, EvalError> {
+        match object {
+            Value::Object(obj) => {
+                let keys: Vec<Value> = obj.keys().map(|k| Value::String(k.clone())).collect();
+                Ok(Value::Array(keys))
+            }
+            _ => Err(EvalError::TypeError(format!(
+                ".keys() requires object, got {}",
+                type_name(object)
+            ))),
+        }
+    }
+
+    /// .values() - returns array of object values
+    fn method_values(&self, object: &Value) -> Result<Value, EvalError> {
+        match object {
+            Value::Object(obj) => {
+                let values: Vec<Value> = obj.values().cloned().collect();
+                Ok(Value::Array(values))
+            }
+            _ => Err(EvalError::TypeError(format!(
+                ".values() requires object, got {}",
+                type_name(object)
+            ))),
+        }
     }
 }
