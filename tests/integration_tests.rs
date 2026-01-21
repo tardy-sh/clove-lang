@@ -1250,3 +1250,159 @@ fn test_string_method_in_filter() {
         _ => panic!("Expected array"),
     }
 }
+
+// ============================================
+// Edge Case Tests
+// ============================================
+
+#[test]
+fn test_method_all_empty_array() {
+    // Vacuous truth: all elements of empty set satisfy any condition
+    let doc = json_object(vec![
+        ("items", json_array(vec![])),
+    ]);
+
+    let result = eval_expr("$[items].all(@ > 0)", doc).unwrap();
+    assert_eq!(result, Value::Boolean(true));
+}
+
+#[test]
+fn test_method_any_empty_array() {
+    let doc = json_object(vec![
+        ("items", json_array(vec![])),
+    ]);
+
+    let result = eval_expr("$[items].any(@ > 0)", doc).unwrap();
+    assert_eq!(result, Value::Boolean(false));
+}
+
+#[test]
+fn test_method_sum_empty_array() {
+    let doc = json_object(vec![
+        ("numbers", json_array(vec![])),
+    ]);
+
+    let result = eval_expr("$[numbers].sum()", doc).unwrap();
+    assert_eq!(result, Value::Integer(0));
+}
+
+#[test]
+fn test_method_filter_empty_array() {
+    let doc = json_object(vec![
+        ("items", json_array(vec![])),
+    ]);
+
+    let result = eval_expr("$[items].filter(@ > 0)", doc).unwrap();
+    assert_eq!(result, json_array(vec![]));
+}
+
+#[test]
+fn test_method_map_empty_array() {
+    let doc = json_object(vec![
+        ("items", json_array(vec![])),
+    ]);
+
+    let result = eval_expr("$[items].map(@ * 2)", doc).unwrap();
+    assert_eq!(result, json_array(vec![]));
+}
+
+#[test]
+fn test_method_sort_empty_array() {
+    let doc = json_object(vec![
+        ("items", json_array(vec![])),
+    ]);
+
+    let result = eval_expr("$[items].sort()", doc).unwrap();
+    assert_eq!(result, json_array(vec![]));
+}
+
+#[test]
+fn test_method_unique_empty_array() {
+    let doc = json_object(vec![
+        ("items", json_array(vec![])),
+    ]);
+
+    let result = eval_expr("$[items].unique()", doc).unwrap();
+    assert_eq!(result, json_array(vec![]));
+}
+
+// ============================================
+// Error Case Tests
+// ============================================
+
+#[test]
+fn test_error_any_on_non_array() {
+    let doc = json_object(vec![
+        ("value", Value::Integer(42)),
+    ]);
+
+    let result = eval_expr("$[value].any(@ > 0)", doc);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("requires array"));
+}
+
+#[test]
+fn test_error_count_on_non_array() {
+    let doc = json_object(vec![
+        ("value", Value::String("hello".into())),
+    ]);
+
+    let result = eval_expr("$[value].count()", doc);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("requires array"));
+}
+
+#[test]
+fn test_error_upper_on_non_string() {
+    let doc = json_object(vec![
+        ("value", Value::Integer(42)),
+    ]);
+
+    let result = eval_expr("$[value].upper()", doc);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("requires string"));
+}
+
+#[test]
+fn test_error_contains_on_non_string() {
+    let doc = json_object(vec![
+        ("value", Value::Array(vec![])),
+    ]);
+
+    let result = eval_expr(r#"$[value].contains("x")"#, doc);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("requires string"));
+}
+
+#[test]
+fn test_error_any_missing_predicate() {
+    let doc = json_object(vec![
+        ("items", json_array(vec![Value::Integer(1)])),
+    ]);
+
+    let result = eval_expr("$[items].any()", doc);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("requires a predicate"));
+}
+
+#[test]
+fn test_error_contains_missing_argument() {
+    let doc = json_object(vec![
+        ("text", Value::String("hello".into())),
+    ]);
+
+    let result = eval_expr("$[text].contains()", doc);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("requires a substring"));
+}
+
+#[test]
+fn test_error_unknown_method() {
+    let doc = json_object(vec![
+        ("value", Value::Integer(42)),
+    ]);
+
+    let result = eval_expr("$[value].foobar()", doc);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("Unknown method"));
+}
