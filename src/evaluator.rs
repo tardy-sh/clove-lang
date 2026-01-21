@@ -431,7 +431,14 @@ impl Evaluator {
             },
             BinOp::Divide => match (left, right) {
                 (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a / b)),
-                (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a / b)),
+                (Value::Integer(a), Value::Integer(b)) => {
+                    // Check if division is exact; if not, return Float
+                    if *a % *b == 0 {
+                        Ok(Value::Integer(a / b))
+                    } else {
+                        Ok(Value::Float(*a as f64 / *b as f64))
+                    }
+                }
                 (Value::Integer(a), Value::Float(b)) => {
                     if let Some(ad) = Decimal::from_i64(*a)
                         && let Some(bd) = Decimal::from_f64(*b)
