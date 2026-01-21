@@ -11,8 +11,8 @@ use clove_lang::ast::{BinOp, Expr, Statement};
 #[test]
 fn test_comparison() {
     let lexer = Lexer::new("$[price] > 100");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
 
     assert!(matches!(
         expr,
@@ -26,8 +26,8 @@ fn test_comparison() {
 #[test]
 fn test_parentheses() {
     let lexer = Lexer::new("(1 + 2) * 3");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
 
     // Should be: Multiply(Add(1, 2), 3)
     match expr {
@@ -49,8 +49,8 @@ fn test_parentheses() {
 #[test]
 fn test_arithmetic() {
     let lexer = Lexer::new("1 + 2 * 3");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
 
     // Should be: Add(1, Multiply(2, 3))
     match expr {
@@ -84,48 +84,48 @@ fn test_arithmetic() {
 #[test]
 fn test_parse_number() {
     let lexer = Lexer::new("42");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     assert!(matches!(expr, Expr::Integer(n) if n == 42));
 }
 
 #[test]
 fn test_parse_float() {
     let lexer = Lexer::new("3.15");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     assert!(matches!(expr, Expr::Float(n) if (n - 3.15).abs() < 0.001));
 }
 
 #[test]
 fn test_parse_string() {
     let lexer = Lexer::new(r##""hello world""##);
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     assert!(matches!(expr, Expr::String(s) if s == "hello world"));
 }
 
 #[test]
 fn test_parse_boolean_true() {
     let lexer = Lexer::new("true");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     assert!(matches!(expr, Expr::Boolean(true)));
 }
 
 #[test]
 fn test_parse_boolean_false() {
     let lexer = Lexer::new("false");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     assert!(matches!(expr, Expr::Boolean(false)));
 }
 
 #[test]
 fn test_parse_null() {
     let lexer = Lexer::new("null");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     assert!(matches!(expr, Expr::Null));
 }
 
@@ -136,8 +136,8 @@ fn test_parse_null() {
 #[test]
 fn test_parse_empty_object() {
     let lexer = Lexer::new("{}");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Object(pairs) => {
@@ -150,8 +150,8 @@ fn test_parse_empty_object() {
 #[test]
 fn test_parse_object_single_field() {
     let lexer = Lexer::new(r##"{"name": "John"}"##);
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Object(pairs) => {
@@ -166,8 +166,8 @@ fn test_parse_object_single_field() {
 #[test]
 fn test_parse_object_multiple_fields() {
     let lexer = Lexer::new(r##"{"name": "John", "age": 30, "active": true}"##);
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Object(pairs) => {
@@ -183,8 +183,8 @@ fn test_parse_object_multiple_fields() {
 #[test]
 fn test_parse_object_with_identifier_keys() {
     let lexer = Lexer::new("{name: 42, age: 30}");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Object(pairs) => {
@@ -199,8 +199,8 @@ fn test_parse_object_with_identifier_keys() {
 #[test]
 fn test_parse_object_with_expressions() {
     let lexer = Lexer::new(r##"{"total": $[price] * 1.1, "name": "Item"}"##);
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Object(pairs) => {
@@ -215,8 +215,8 @@ fn test_parse_object_with_expressions() {
 #[test]
 fn test_parse_nested_objects() {
     let lexer = Lexer::new(r##"{"user": {"name": "John", "age": 30}}"##);
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Object(pairs) => {
@@ -231,8 +231,8 @@ fn test_parse_nested_objects() {
 fn test_parse_object_trailing_comma() {
     // Should handle trailing comma gracefully (or reject it)
     let lexer = Lexer::new(r##"{"name": "John",}"##);
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     // This will depend on your implementation
     // Either it parses successfully or panics
@@ -251,8 +251,8 @@ fn test_parse_object_trailing_comma() {
 #[test]
 fn test_parse_empty_array() {
     let lexer = Lexer::new("[]");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Array(elements) => {
@@ -265,8 +265,8 @@ fn test_parse_empty_array() {
 #[test]
 fn test_parse_array_numbers() {
     let lexer = Lexer::new("[1, 2, 3]");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Array(elements) => {
@@ -282,8 +282,8 @@ fn test_parse_array_numbers() {
 #[test]
 fn test_parse_array_strings() {
     let lexer = Lexer::new(r##"["a", "b", "c"]"##);
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Array(elements) => {
@@ -297,8 +297,8 @@ fn test_parse_array_strings() {
 #[test]
 fn test_parse_array_mixed_types() {
     let lexer = Lexer::new(r##"[1, 1.0, "hello", true, null]"##);
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Array(elements) => {
@@ -316,8 +316,8 @@ fn test_parse_array_mixed_types() {
 #[test]
 fn test_parse_array_with_expressions() {
     let lexer = Lexer::new("[$[price] * 1.1, $[quantity]]");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Array(elements) => {
@@ -332,8 +332,8 @@ fn test_parse_array_with_expressions() {
 #[test]
 fn test_parse_nested_arrays() {
     let lexer = Lexer::new("[[1, 2], [3, 4]]");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Array(elements) => {
@@ -349,14 +349,14 @@ fn test_parse_nested_arrays() {
 fn test_parse_array_vs_access() {
     // [1, 2] is array literal
     let lexer = Lexer::new("[1, 2]");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     assert!(matches!(expr, Expr::Array(_)));
     
     // $[items] is access
     let lexer = Lexer::new("$[items]");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     assert!(matches!(expr, Expr::Access { .. }));
 }
 
@@ -368,48 +368,48 @@ fn test_parse_array_vs_access() {
 #[test]
 fn test_parse_root() {
     let lexer = Lexer::new("$");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     assert!(matches!(expr, Expr::Root));
 }
 
 #[test]
 fn test_parse_env_var() {
     let lexer = Lexer::new("$HOME");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     assert!(matches!(expr, Expr::EnvVar(name) if name == "HOME"));
 }
 
 #[test]
 fn test_parse_lambda_param() {
     let lexer = Lexer::new("@");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     assert!(matches!(expr, Expr::LambdaParam));
 }
 
 #[test]
 fn test_parse_scope_ref() {
     let lexer = Lexer::new("@items");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     assert!(matches!(expr, Expr::ScopeRef(name) if name == "items"));
 }
 
 #[test]
 fn test_parse_arg_ref() {
     let lexer = Lexer::new("@1");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     assert!(matches!(expr, Expr::ArgRef(1)));
 }
 
 #[test]
 fn test_parse_arg_ref_multi_digit() {
     let lexer = Lexer::new("@10");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     assert!(matches!(expr, Expr::ArgRef(10)));
 }
 
@@ -420,8 +420,8 @@ fn test_parse_arg_ref_multi_digit() {
 #[test]
 fn test_parse_simple_bracket_access() {
     let lexer = Lexer::new("$[field]");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Access { object, key } => {
@@ -435,8 +435,8 @@ fn test_parse_simple_bracket_access() {
 #[test]
 fn test_parse_nested_bracket_access() {
     let lexer = Lexer::new("$[items][name]");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Access { object, key } => {
@@ -456,8 +456,8 @@ fn test_parse_nested_bracket_access() {
 #[test]
 fn test_parse_array_index() {
     let lexer = Lexer::new("$[items][0]");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Access { object: _, key } => {
@@ -470,8 +470,8 @@ fn test_parse_array_index() {
 #[test]
 fn test_parse_dot_notation() {
     let lexer = Lexer::new("$.field");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Access { object, key } => {
@@ -485,8 +485,8 @@ fn test_parse_dot_notation() {
 #[test]
 fn test_parse_mixed_access() {
     let lexer = Lexer::new("$[items].name[0]");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     // Verify it parses without panicking
     assert!(matches!(expr, Expr::Access { .. }));
@@ -495,8 +495,8 @@ fn test_parse_mixed_access() {
 #[test]
 fn test_parse_deeply_nested_access() {
     let lexer = Lexer::new("$[user][profile][settings][theme]");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     assert!(matches!(expr, Expr::Access { .. }));
 }
@@ -508,8 +508,8 @@ fn test_parse_deeply_nested_access() {
 #[test]
 fn test_parse_quoted_key_with_hyphen() {
     let lexer = Lexer::new(r##"$["first-name"]"##);
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Access { object, key } => {
@@ -523,8 +523,8 @@ fn test_parse_quoted_key_with_hyphen() {
 #[test]
 fn test_parse_quoted_key_with_at() {
     let lexer = Lexer::new(r##"$["@timestamp"]"##);
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Access { object: _, key } => {
@@ -537,8 +537,8 @@ fn test_parse_quoted_key_with_at() {
 #[test]
 fn test_parse_quoted_key_with_dot() {
     let lexer = Lexer::new(r##"$["user.email"]"##);
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Access { object: _, key } => {
@@ -551,8 +551,8 @@ fn test_parse_quoted_key_with_dot() {
 #[test]
 fn test_parse_quoted_key_with_space() {
     let lexer = Lexer::new(r##"$["field with spaces"]"##);
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Access { object: _, key } => {
@@ -565,8 +565,8 @@ fn test_parse_quoted_key_with_space() {
 #[test]
 fn test_parse_quoted_key_with_dollar() {
     let lexer = Lexer::new(r##"$["$ref"]"##);
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Access { object: _, key } => {
@@ -583,8 +583,8 @@ fn test_parse_quoted_key_with_dollar() {
 #[test]
 fn test_parse_computed_key_simple() {
     let lexer = Lexer::new("$[0 + 1]");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Access { object, key } => {
@@ -599,8 +599,8 @@ fn test_parse_computed_key_simple() {
 #[test]
 fn test_parse_nested_access_as_key() {
     let lexer = Lexer::new("$[$[key_field]]");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Access { object, key } => {
@@ -619,8 +619,8 @@ fn test_parse_nested_access_as_key() {
 #[test]
 fn test_parse_existence_check() {
     let lexer = Lexer::new("$[items][?]");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::ExistenceCheck(inner) => {
@@ -639,8 +639,8 @@ fn test_parse_existence_check() {
 #[test]
 fn test_parse_nested_existence_check() {
     let lexer = Lexer::new("$[items][0][?]");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::ExistenceCheck(inner) => {
@@ -655,8 +655,8 @@ fn test_parse_nested_existence_check() {
 fn test_parse_question_mark_as_key() {
     // Quoted question mark is a literal key
     let lexer = Lexer::new(r##"$["?"]"##);
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Access { object, key } => {
@@ -668,16 +668,15 @@ fn test_parse_question_mark_as_key() {
 }
 
 #[test]
-#[should_panic(expected = "Expected Eof, got ")]
 fn test_cannot_access_after_existence_check() {
-    // This should parse fine but fail at evaluation
+    // Should return error - cannot access after existence check
     let lexer = Lexer::new("$[items][?][0]");
-    let mut parser = Parser::new(lexer);
-    let _expr = parser.parse();
-    
-    // The parse should succeed but create:
-    // Access { ExistenceCheck(...), Number(0) }
-    // Which will fail at evaluation
+    let mut parser = Parser::new(lexer).unwrap();
+    let result = parser.parse();
+
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("Expected"), "Expected error about EOF, got: {}", err);
 }
 
 
@@ -689,8 +688,8 @@ fn test_cannot_access_after_existence_check() {
 #[test]
 fn test_parse_addition() {
     let lexer = Lexer::new("1 + 2");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::BinaryOp { op: BinOp::Add, left, right } => {
@@ -704,8 +703,8 @@ fn test_parse_addition() {
 #[test]
 fn test_parse_subtraction() {
     let lexer = Lexer::new("10 - 5");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     assert!(matches!(expr, Expr::BinaryOp { op: BinOp::Subtract, .. }));
 }
@@ -713,8 +712,8 @@ fn test_parse_subtraction() {
 #[test]
 fn test_parse_multiplication() {
     let lexer = Lexer::new("3 * 4");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     assert!(matches!(expr, Expr::BinaryOp { op: BinOp::Multiply, .. }));
 }
@@ -722,8 +721,8 @@ fn test_parse_multiplication() {
 #[test]
 fn test_parse_division() {
     let lexer = Lexer::new("8 / 2");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     assert!(matches!(expr, Expr::BinaryOp { op: BinOp::Divide, .. }));
 }
@@ -731,8 +730,8 @@ fn test_parse_division() {
 #[test]
 fn test_parse_modulo() {
     let lexer = Lexer::new("10 % 3");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     assert!(matches!(expr, Expr::BinaryOp { op: BinOp::Modulo, .. }));
 }
@@ -740,8 +739,8 @@ fn test_parse_modulo() {
 #[test]
 fn test_parse_arithmetic_precedence() {
     let lexer = Lexer::new("1 + 2 * 3");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     // Should be: Add(1, Multiply(2, 3))
     match expr {
@@ -762,8 +761,8 @@ fn test_parse_arithmetic_precedence() {
 #[test]
 fn test_parse_left_associativity() {
     let lexer = Lexer::new("1 - 2 - 3");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     // Should be: Subtract(Subtract(1, 2), 3) = (1 - 2) - 3
     match expr {
@@ -784,8 +783,8 @@ fn test_parse_left_associativity() {
 #[test]
 fn test_parse_string_concatenation() {
     let lexer = Lexer::new(r##""hello" + " " + "world""##);
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     // Should use Add operator for string concatenation
     assert!(matches!(expr, Expr::BinaryOp { op: BinOp::Add, .. }));
@@ -794,8 +793,8 @@ fn test_parse_string_concatenation() {
 #[test]
 fn test_parse_field_arithmetic() {
     let lexer = Lexer::new("$[price] * 1.1");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::BinaryOp { op: BinOp::Multiply, left, right } => {
@@ -813,8 +812,8 @@ fn test_parse_field_arithmetic() {
 #[test]
 fn test_parse_parentheses_simple() {
     let lexer = Lexer::new("(5)");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     assert!(matches!(expr, Expr::Integer (n) if n == 5));
 }
@@ -822,8 +821,8 @@ fn test_parse_parentheses_simple() {
 #[test]
 fn test_parse_parentheses_override_precedence() {
     let lexer = Lexer::new("(1 + 2) * 3");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     // Should be: Multiply(Add(1, 2), 3)
     match expr {
@@ -844,8 +843,8 @@ fn test_parse_parentheses_override_precedence() {
 #[test]
 fn test_parse_nested_parentheses() {
     let lexer = Lexer::new("((1 + 2))");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     assert!(matches!(expr, Expr::BinaryOp { op: BinOp::Add, .. }));
 }
@@ -853,8 +852,8 @@ fn test_parse_nested_parentheses() {
 #[test]
 fn test_parse_complex_precedence() {
     let lexer = Lexer::new("1 + 2 * 3 + 4");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     // Should be: Add(Add(1, Multiply(2, 3)), 4)
     match expr {
@@ -879,8 +878,8 @@ fn test_parse_complex_precedence() {
 #[test]
 fn test_parse_equal() {
     let lexer = Lexer::new("$[x] == 5");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     assert!(matches!(expr, Expr::BinaryOp { op: BinOp::Equal, .. }));
 }
@@ -888,8 +887,8 @@ fn test_parse_equal() {
 #[test]
 fn test_parse_not_equal() {
     let lexer = Lexer::new("$[x] != 5");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     assert!(matches!(expr, Expr::BinaryOp { op: BinOp::NotEqual, .. }));
 }
@@ -897,8 +896,8 @@ fn test_parse_not_equal() {
 #[test]
 fn test_parse_less_than() {
     let lexer = Lexer::new("$[x] < 5");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     assert!(matches!(expr, Expr::BinaryOp { op: BinOp::LessThan, .. }));
 }
@@ -906,8 +905,8 @@ fn test_parse_less_than() {
 #[test]
 fn test_parse_greater_than() {
     let lexer = Lexer::new("$[x] > 5");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     assert!(matches!(expr, Expr::BinaryOp { op: BinOp::GreaterThan, .. }));
 }
@@ -915,8 +914,8 @@ fn test_parse_greater_than() {
 #[test]
 fn test_parse_less_equal() {
     let lexer = Lexer::new("$[x] <= 5");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     assert!(matches!(expr, Expr::BinaryOp { op: BinOp::LessEqual, .. }));
 }
@@ -924,8 +923,8 @@ fn test_parse_less_equal() {
 #[test]
 fn test_parse_greater_equal() {
     let lexer = Lexer::new("$[x] >= 5");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     assert!(matches!(expr, Expr::BinaryOp { op: BinOp::GreaterEqual, .. }));
 }
@@ -933,8 +932,8 @@ fn test_parse_greater_equal() {
 #[test]
 fn test_parse_comparison_with_arithmetic() {
     let lexer = Lexer::new("$[price] * 1.1 > 100");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     // Should be: GreaterThan(Multiply(price, 1.1), 100)
     match expr {
@@ -953,8 +952,8 @@ fn test_parse_comparison_with_arithmetic() {
 #[test]
 fn test_parse_and() {
     let lexer = Lexer::new("$[x] > 5 and $[y] < 10");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     assert!(matches!(expr, Expr::BinaryOp { op: BinOp::And, .. }));
 }
@@ -962,8 +961,8 @@ fn test_parse_and() {
 #[test]
 fn test_parse_or() {
     let lexer = Lexer::new("$[x] == 1 or $[x] == 2");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     assert!(matches!(expr, Expr::BinaryOp { op: BinOp::Or, .. }));
 }
@@ -971,8 +970,8 @@ fn test_parse_or() {
 #[test]
 fn test_parse_and_or_precedence() {
     let lexer = Lexer::new("$[a] and $[b] or $[c]");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     // Should be: Or(And(a, b), c)
     match expr {
@@ -987,8 +986,8 @@ fn test_parse_and_or_precedence() {
 #[test]
 fn test_parse_complex_logical() {
     let lexer = Lexer::new("($[a] > 5 and $[b] < 10) or $[c] == 0");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     assert!(matches!(expr, Expr::BinaryOp { op: BinOp::Or, .. }));
 }
@@ -996,8 +995,8 @@ fn test_parse_complex_logical() {
 #[test]
 fn test_parse_multiple_and() {
     let lexer = Lexer::new("$[a] and $[b] and $[c]");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     // Should be left-associative: And(And(a, b), c)
     match expr {
@@ -1012,8 +1011,8 @@ fn test_parse_multiple_and() {
 #[test]
 fn test_parse_and_simple() {
     let lexer = Lexer::new("true and false");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::BinaryOp { op: BinOp::And, left, right } => {
@@ -1027,8 +1026,8 @@ fn test_parse_and_simple() {
 #[test]
 fn test_parse_and_with_comparisons() {
     let lexer = Lexer::new("$[x] > 5 and $[y] < 10");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::BinaryOp { op: BinOp::And, left, right } => {
@@ -1042,8 +1041,8 @@ fn test_parse_and_with_comparisons() {
 #[test]
 fn test_parse_multiple_and_chains() {
     let lexer = Lexer::new("$[a] and $[b] and $[c] and $[d]");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     // Should be: And(And(And(a, b), c), d)
     match expr {
@@ -1057,8 +1056,8 @@ fn test_parse_multiple_and_chains() {
 #[test]
 fn test_parse_and_with_parentheses() {
     let lexer = Lexer::new("($[a] and $[b]) and ($[c] and $[d])");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     assert!(matches!(expr, Expr::BinaryOp { op: BinOp::And, .. }));
 }
@@ -1071,8 +1070,8 @@ fn test_parse_and_with_parentheses() {
 #[test]
 fn test_parse_unary_minus() {
     let lexer = Lexer::new("-5");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     // Represented as 0 - 5
     match expr {
@@ -1087,8 +1086,8 @@ fn test_parse_unary_minus() {
 #[test]
 fn test_parse_unary_minus_with_expression() {
     let lexer = Lexer::new("-(5 + 3)");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::BinaryOp { op: BinOp::Subtract, left, right } => {
@@ -1106,8 +1105,8 @@ fn test_parse_unary_minus_with_expression() {
 #[test]
 fn test_parse_real_world_query() {
     let lexer = Lexer::new(r##"$[items][0][price] * 1.1 + $[tax]"##);
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     // Just verify it parses
     assert!(matches!(expr, Expr::BinaryOp { op: BinOp::Add, .. }));
@@ -1118,8 +1117,8 @@ fn test_parse_complex_condition() {
     let lexer = Lexer::new(
         r##"($[age] >= 18 and $[age] <= 65) or $[status] == "exempt""##
     );
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     assert!(matches!(expr, Expr::BinaryOp { op: BinOp::Or, .. }));
 }
@@ -1127,8 +1126,8 @@ fn test_parse_complex_condition() {
 #[test]
 fn test_parse_nested_access_with_arithmetic() {
     let lexer = Lexer::new("$[items][$[current] + 1][price]");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     assert!(matches!(expr, Expr::Access { .. }));
 }
@@ -1136,8 +1135,8 @@ fn test_parse_nested_access_with_arithmetic() {
 #[test]
 fn test_parse_scope_ref_with_access() {
     let lexer = Lexer::new("@items[0][price]");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     // Should be: Access(Access(ScopeRef("items"), 0), "price")
     match expr {
@@ -1158,8 +1157,8 @@ fn test_parse_scope_ref_with_access() {
 #[test]
 fn test_parse_lambda_param_with_access() {
     let lexer = Lexer::new("@[price]");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Access { object, key } => {
@@ -1173,8 +1172,8 @@ fn test_parse_lambda_param_with_access() {
 #[test]
 fn test_parse_arg_ref_with_access() {
     let lexer = Lexer::new("@1[price]");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Access { object, key } => {
@@ -1193,8 +1192,8 @@ fn test_parse_arg_ref_with_access() {
 fn test_parse_output_with_object() {
     // This is for later when you add output parsing, but the object part works now
     let lexer = Lexer::new(r##"{"total": $[items][0][price] * 1.1, "count": 5}"##);
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Object(pairs) => {
@@ -1209,8 +1208,8 @@ fn test_parse_output_with_object() {
 #[test]
 fn test_parse_array_of_objects() {
     let lexer = Lexer::new(r##"[{"name": "a"}, {"name": "b"}]"##);
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Array(elements) => {
@@ -1227,126 +1226,151 @@ fn test_parse_complex_nested_structure() {
     let lexer = Lexer::new(
         r##"{"items": [1, 2, 3], "metadata": {"count": 3, "total": 6}}"##
     );
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     assert!(matches!(expr, Expr::Object(_)));
 }
 
 // ============================================================================
-// Error Cases (Should Panic)
+// Error Cases (Return Result::Err)
 // ============================================================================
 
 #[test]
-#[should_panic(expected = "Unexpected use of identifiers - identifiers must be a part of access expressions")]
 fn test_parse_bare_identifier_error() {
     let lexer = Lexer::new("items");
-    let mut parser = Parser::new(lexer);
-    parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let result = parser.parse();
+
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("identifier"), "Expected identifier error, got: {}", err);
 }
 
 #[test]
-#[should_panic(expected = "Expected")]
 fn test_parse_unclosed_bracket() {
     let lexer = Lexer::new("$[items");
-    let mut parser = Parser::new(lexer);
-    parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let result = parser.parse();
+
+    assert!(result.is_err());
 }
 
 #[test]
-#[should_panic(expected = "Expected")]
 fn test_parse_unclosed_parenthesis() {
     let lexer = Lexer::new("(1 + 2");
-    let mut parser = Parser::new(lexer);
-    parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let result = parser.parse();
+
+    assert!(result.is_err());
 }
 
 #[test]
-#[should_panic]
 fn test_parse_empty_brackets() {
     let lexer = Lexer::new("$[]");
-    let mut parser = Parser::new(lexer);
-    parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let result = parser.parse();
+
+    assert!(result.is_err());
 }
 
 #[test]
-#[should_panic(expected = "Expected identifier after '.'")]
 fn test_parse_dot_without_identifier() {
     let lexer = Lexer::new("$.5");
-    let mut parser = Parser::new(lexer);
-    parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let result = parser.parse();
+
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("identifier"), "Expected identifier error, got: {}", err);
 }
 
 #[test]
-#[should_panic(expected = "Expected string or identifier as object key")]
 fn test_parse_object_invalid_key() {
     let lexer = Lexer::new("{123: value}");
-    let mut parser = Parser::new(lexer);
-    parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let result = parser.parse();
+
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("string") || err.contains("identifier") || err.contains("key"),
+            "Expected key error, got: {}", err);
 }
 
 #[test]
-#[should_panic(expected = "Expected")]
 fn test_parse_object_missing_colon() {
     let lexer = Lexer::new(r##"{"name" "value"}"##);
-    let mut parser = Parser::new(lexer);
-    parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let result = parser.parse();
+
+    assert!(result.is_err());
 }
 
 #[test]
-#[should_panic(expected = "Unexpected token in primary expression")]
 fn test_parse_object_missing_value() {
     let lexer = Lexer::new(r##"{"name":}"##);
-    let mut parser = Parser::new(lexer);
-    parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let result = parser.parse();
+
+    assert!(result.is_err());
 }
 
 #[test]
-#[should_panic(expected = "Expected")]
 fn test_parse_object_unclosed() {
     let lexer = Lexer::new(r##"{"name": "value""##);
-    let mut parser = Parser::new(lexer);
-    parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let result = parser.parse();
+
+    assert!(result.is_err());
 }
 
 #[test]
-#[should_panic(expected = "Expected")]
 fn test_parse_array_unclosed() {
     let lexer = Lexer::new("[1, 2, 3");
-    let mut parser = Parser::new(lexer);
-    parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let result = parser.parse();
+
+    assert!(result.is_err());
 }
 
 #[test]
-#[should_panic(expected = "Unexpected token")]
 fn test_parse_invalid_primary() {
     let lexer = Lexer::new("?");
-    let mut parser = Parser::new(lexer);
-    parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let result = parser.parse();
+
+    assert!(result.is_err());
 }
 
 #[test]
-#[should_panic(expected = "Expected Eof")]
 fn test_parse_pipe_in_expression() {
     let lexer = Lexer::new("5 | 3");
-    let mut parser = Parser::new(lexer);
-    parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let result = parser.parse();
+
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("Eof"), "Expected EOF error, got: {}", err);
 }
 
 #[test]
-#[should_panic(expected = "Expected")]
 fn test_parse_mismatched_parentheses() {
     let lexer = Lexer::new("(1 + 2))");
-    let mut parser = Parser::new(lexer);
-    parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let result = parser.parse();
+
+    assert!(result.is_err());
 }
 
 #[test]
-#[should_panic(expected = "Expected identifier after '.'")]
 fn test_parse_dot_followed_by_number() {
     let lexer = Lexer::new("$.123");
-    let mut parser = Parser::new(lexer);
-    parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let result = parser.parse();
+
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("identifier"), "Expected identifier error, got: {}", err);
 }
 
 
@@ -1358,8 +1382,8 @@ fn test_parse_dot_followed_by_number() {
 fn test_parse_access_key_identifier() {
     // This should go through the Identifier branch
     let lexer = Lexer::new("$[field]");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Access { key, .. } => {
@@ -1373,8 +1397,8 @@ fn test_parse_access_key_identifier() {
 fn test_parse_access_key_string() {
     // This should go through the String branch
     let lexer = Lexer::new(r##"$["field"]"##);
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::Access { key, .. } => {
@@ -1391,8 +1415,8 @@ fn test_parse_access_key_string() {
 #[test]
 fn test_parse_or_simple() {
     let lexer = Lexer::new("true or false");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     match expr {
         Expr::BinaryOp { op: BinOp::Or, left, right } => {
@@ -1406,8 +1430,8 @@ fn test_parse_or_simple() {
 #[test]
 fn test_parse_multiple_or_chains() {
     let lexer = Lexer::new("$[a] or $[b] or $[c]");
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     assert!(matches!(expr, Expr::BinaryOp { op: BinOp::Or, .. }));
 }
@@ -1426,8 +1450,8 @@ fn test_parse_all_comparison_operators() {
     for (op_str, expected_op) in operators {
         let input = format!("5 {} 3", op_str);
         let lexer = Lexer::new(&input);
-        let mut parser = Parser::new(lexer);
-        let expr = parser.parse();
+        let mut parser = Parser::new(lexer).unwrap();
+        let expr = parser.parse().unwrap();
         
         match expr {
             Expr::BinaryOp { op, .. } => {
@@ -1451,8 +1475,8 @@ fn test_parse_all_arithmetic_operators() {
     for (op_str, expected_op) in operators {
         let input = format!("10 {} 2", op_str);
         let lexer = Lexer::new(&input);
-        let mut parser = Parser::new(lexer);
-        let expr = parser.parse();
+        let mut parser = Parser::new(lexer).unwrap();
+        let expr = parser.parse().unwrap();
         
         match expr {
             Expr::BinaryOp { op, .. } => {
@@ -1471,8 +1495,8 @@ fn test_parse_all_arithmetic_operators() {
 #[test]
 fn test_parse_simple_filter() {
     let lexer = Lexer::new("$ | ?($[status] == \"active\")");
-    let mut parser = Parser::new(lexer);
-    let query = parser.parse_query();
+    let mut parser = Parser::new(lexer).unwrap();
+    let query = parser.parse_query().unwrap();
     
     assert_eq!(query.statements.len(), 1);
     match &query.statements[0] {
@@ -1486,8 +1510,8 @@ fn test_parse_simple_filter() {
 #[test]
 fn test_parse_complex_filter() {
     let lexer = Lexer::new("$ | ?(($[age] > 18 and $[verified] == true) or $[admin] == true)");
-    let mut parser = Parser::new(lexer);
-    let query = parser.parse_query();
+    let mut parser = Parser::new(lexer).unwrap();
+    let query = parser.parse_query().unwrap();
     
     assert_eq!(query.statements.len(), 1);
     assert!(matches!(query.statements[0], Statement::Filter(_)));
@@ -1500,8 +1524,8 @@ fn test_parse_complex_filter() {
 #[test]
 fn test_parse_simple_transform() {
     let lexer = Lexer::new("$ | ~($[price] := $[price] * 1.1)");
-    let mut parser = Parser::new(lexer);
-    let query = parser.parse_query();
+    let mut parser = Parser::new(lexer).unwrap();
+    let query = parser.parse_query().unwrap();
     
     assert_eq!(query.statements.len(), 1);
     match &query.statements[0] {
@@ -1516,8 +1540,8 @@ fn test_parse_simple_transform() {
 #[test]
 fn test_parse_array_filter_transform() {
     let lexer = Lexer::new("$ | ~($[items] := ?(@[price] > 100))");
-    let mut parser = Parser::new(lexer);
-    let query = parser.parse_query();
+    let mut parser = Parser::new(lexer).unwrap();
+    let query = parser.parse_query().unwrap();
     
     assert_eq!(query.statements.len(), 1);
     match &query.statements[0] {
@@ -1537,8 +1561,8 @@ fn test_parse_array_filter_transform() {
 #[test]
 fn test_parse_scope_definition() {
     let lexer = Lexer::new("$ | @items := $[items]");
-    let mut parser = Parser::new(lexer);
-    let query = parser.parse_query();
+    let mut parser = Parser::new(lexer).unwrap();
+    let query = parser.parse_query().unwrap();
     
     assert_eq!(query.statements.len(), 1);
     match &query.statements[0] {
@@ -1553,8 +1577,8 @@ fn test_parse_scope_definition() {
 #[test]
 fn test_parse_scope_usage() {
     let lexer = Lexer::new("$ | @items := $[items] | @items[0]");
-    let mut parser = Parser::new(lexer);
-    let query = parser.parse_query();
+    let mut parser = Parser::new(lexer).unwrap();
+    let query = parser.parse_query().unwrap();
     
     assert_eq!(query.statements.len(), 2);
     assert!(matches!(query.statements[0], Statement::ScopeDefinition { .. }));
@@ -1568,8 +1592,8 @@ fn test_parse_scope_usage() {
 #[test]
 fn test_parse_access_statement() {
     let lexer = Lexer::new("$ | $[items][0]");
-    let mut parser = Parser::new(lexer);
-    let query = parser.parse_query();
+    let mut parser = Parser::new(lexer).unwrap();
+    let query = parser.parse_query().unwrap();
     
     assert_eq!(query.statements.len(), 1);
     match &query.statements[0] {
@@ -1587,8 +1611,8 @@ fn test_parse_access_statement() {
 #[test]
 fn test_parse_output_root() {
     let lexer = Lexer::new("$ | ?($[x] > 5) | !($)");
-    let mut parser = Parser::new(lexer);
-    let query = parser.parse_query();
+    let mut parser = Parser::new(lexer).unwrap();
+    let query = parser.parse_query().unwrap();
     
     assert_eq!(query.statements.len(), 1);
     assert!(query.output.is_some());
@@ -1598,8 +1622,8 @@ fn test_parse_output_root() {
 #[test]
 fn test_parse_output_field() {
     let lexer = Lexer::new("$ | !($[items])");
-    let mut parser = Parser::new(lexer);
-    let query = parser.parse_query();
+    let mut parser = Parser::new(lexer).unwrap();
+    let query = parser.parse_query().unwrap();
     
     assert_eq!(query.statements.len(), 0);
     assert!(query.output.is_some());
@@ -1609,8 +1633,8 @@ fn test_parse_output_field() {
 #[test]
 fn test_parse_output_object() {
     let lexer = Lexer::new(r##"$ | !({"total": $[total], "count": $[count]})"##);
-    let mut parser = Parser::new(lexer);
-    let query = parser.parse_query();
+    let mut parser = Parser::new(lexer).unwrap();
+    let query = parser.parse_query().unwrap();
     
     assert!(query.output.is_some());
     assert!(matches!(query.output.unwrap(), Expr::Object(_)));
@@ -1619,8 +1643,8 @@ fn test_parse_output_object() {
 #[test]
 fn test_parse_no_output() {
     let lexer = Lexer::new("$ | ?($[x] > 5)");
-    let mut parser = Parser::new(lexer);
-    let query = parser.parse_query();
+    let mut parser = Parser::new(lexer).unwrap();
+    let query = parser.parse_query().unwrap();
     
     assert_eq!(query.statements.len(), 1);
     assert!(query.output.is_none()); // Defaults to root
@@ -1633,8 +1657,8 @@ fn test_parse_no_output() {
 #[test]
 fn test_parse_multiple_statements() {
     let lexer = Lexer::new("$ | ?($[status] == \"active\") | ~($[price] := $[price] * 1.1) | !($)");
-    let mut parser = Parser::new(lexer);
-    let query = parser.parse_query();
+    let mut parser = Parser::new(lexer).unwrap();
+    let query = parser.parse_query().unwrap();
     
     assert_eq!(query.statements.len(), 2);
     assert!(matches!(query.statements[0], Statement::Filter(_)));
@@ -1647,8 +1671,8 @@ fn test_parse_complex_pipeline() {
     let lexer = Lexer::new(
         "$ | @items := $[items] | ?(@items[0][price] > 100) | ~($[total] := @items[0][price]) | !($[total])"
     );
-    let mut parser = Parser::new(lexer);
-    let query = parser.parse_query();
+    let mut parser = Parser::new(lexer).unwrap();
+    let query = parser.parse_query().unwrap();
     
     assert_eq!(query.statements.len(), 3);
 }
@@ -1660,8 +1684,8 @@ fn test_parse_complex_pipeline() {
 #[test]
 fn test_parse_query_with_udf() {
     let lexer = Lexer::new("&expensive:1 := ?(@1[price] > 100)\n$ | ?($[items][0][price] > 50)");
-    let mut parser = Parser::new(lexer);
-    let query = parser.parse_query();
+    let mut parser = Parser::new(lexer).unwrap();
+    let query = parser.parse_query().unwrap();
     
     assert_eq!(query.udfs.len(), 1);
     assert_eq!(query.udfs[0].name, "expensive");
@@ -1675,8 +1699,8 @@ fn test_parse_multiple_udfs() {
          &cheap:1 := ?(@1[price] < 50)\n\
          $ | ?($[x] > 5)"
     );
-    let mut parser = Parser::new(lexer);
-    let query = parser.parse_query();
+    let mut parser = Parser::new(lexer).unwrap();
+    let query = parser.parse_query().unwrap();
     
     assert_eq!(query.udfs.len(), 2);
     assert_eq!(query.udfs[0].name, "expensive");
@@ -1684,38 +1708,46 @@ fn test_parse_multiple_udfs() {
 }
 
 // ============================================================================
-// Error Cases
+// Error Cases (Query)
 // ============================================================================
 
 #[test]
-#[should_panic(expected = "Expected")]
 fn test_parse_filter_missing_parens() {
     let lexer = Lexer::new("$ | ?$[x] > 5");
-    let mut parser = Parser::new(lexer);
-    parser.parse_query();
+    let mut parser = Parser::new(lexer).unwrap();
+    let result = parser.parse_query();
+
+    assert!(result.is_err());
 }
 
 #[test]
-#[should_panic(expected = "Expected")]
 fn test_parse_transform_missing_assignment() {
     let lexer = Lexer::new("$ | ~($[price])");
-    let mut parser = Parser::new(lexer);
-    parser.parse_query();
+    let mut parser = Parser::new(lexer).unwrap();
+    let result = parser.parse_query();
+
+    assert!(result.is_err());
 }
 
 #[test]
-#[should_panic(expected = "Expected Dollar")]
 fn test_parse_query_no_dollar_start() {
     let lexer = Lexer::new("?($[x] > 5)");
-    let mut parser = Parser::new(lexer);
-    parser.parse_query();
+    let mut parser = Parser::new(lexer).unwrap();
+    let result = parser.parse_query();
+
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("Dollar"), "Expected Dollar error, got: {}", err);
 }
 
 #[test]
-#[should_panic(expected = "Expected identifier after `@`")]
 fn test_parse_scope_no_name() {
     let lexer = Lexer::new("$ | @ := $[items]");
-    let mut parser = Parser::new(lexer);
-    parser.parse_query();
+    let mut parser = Parser::new(lexer).unwrap();
+    let result = parser.parse_query();
+
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("identifier"), "Expected identifier error, got: {}", err);
 }
 

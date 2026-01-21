@@ -95,8 +95,8 @@ impl Evaluator {
     ///
     /// let query_str = "$ | ?($[price] > 50)";
     /// let lexer = Lexer::new(query_str);
-    /// let mut parser = Parser::new(lexer);
-    /// let query = parser.parse_query();
+    /// let mut parser = Parser::new(lexer).unwrap();
+    /// let query = parser.parse_query().unwrap();
     ///
     /// let mut evaluator = Evaluator::new();
     /// let result = evaluator.eval_query(&query, Value::Object(doc)).unwrap();

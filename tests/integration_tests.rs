@@ -4,8 +4,8 @@ use std::collections::HashMap;
 
 fn eval_expr(expr_str: &str, doc: Value) -> Result<Value, String> {
     let lexer = Lexer::new(expr_str);
-    let mut parser = Parser::new(lexer);
-    let expr = parser.parse();
+    let mut parser = Parser::new(lexer).unwrap();
+    let expr = parser.parse().unwrap();
     
     let mut evaluator = Evaluator::new();
     evaluator.eval_expression(&expr, doc)
@@ -14,8 +14,8 @@ fn eval_expr(expr_str: &str, doc: Value) -> Result<Value, String> {
 
 fn eval_query(query_str: &str, doc: Value) -> Result<Value, String> {
     let lexer = Lexer::new(query_str);
-    let mut parser = Parser::new(lexer);
-    let query = parser.parse_query();
+    let mut parser = Parser::new(lexer).unwrap();
+    let query = parser.parse_query().unwrap();
     
     let mut evaluator = Evaluator::new();
     evaluator.eval_query(&query, doc)
