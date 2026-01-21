@@ -1,8 +1,39 @@
 use crate::{
     ast::{BinOp, Expr, Query, Statement, Token, UDF},
-    lexer::Lexer,
+    lexer::{Lexer, LexError},
 };
 use std::mem;
+
+/// Errors that can occur during parsing
+#[derive(Debug, Clone)]
+pub enum ParseError {
+    /// Lexer error (with position)
+    LexError(LexError),
+    /// Unexpected token
+    UnexpectedToken { expected: String, got: Token },
+    /// Invalid syntax
+    InvalidSyntax(String),
+}
+
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ParseError::LexError(e) => write!(f, "{}", e),
+            ParseError::UnexpectedToken { expected, got } => {
+                write!(f, "Expected {}, got {:?}", expected, got)
+            }
+            ParseError::InvalidSyntax(msg) => write!(f, "{}", msg),
+        }
+    }
+}
+
+impl std::error::Error for ParseError {}
+
+impl From<LexError> for ParseError {
+    fn from(e: LexError) -> Self {
+        ParseError::LexError(e)
+    }
+}
 
 pub struct Parser {
     lexer: Lexer,
@@ -11,7 +42,8 @@ pub struct Parser {
 
 impl Parser {
     pub fn new(mut lexer: Lexer) -> Self {
-        let current_token = lexer.next_token();
+        // Unwrap here - if the first token fails, we panic at construction
+        let current_token = lexer.next_token().expect("Failed to read first token");
         Parser {
             lexer,
             current_token,
@@ -19,7 +51,9 @@ impl Parser {
     }
 
     fn advance(&mut self) {
-        self.current_token = self.lexer.next_token();
+        // For now, unwrap lexer errors - they become panics
+        // TODO: Convert parser to return Result<T, ParseError>
+        self.current_token = self.lexer.next_token().expect("Lexer error");
     }
 
     fn expect(&mut self, expected: Token) {

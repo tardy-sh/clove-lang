@@ -37,9 +37,9 @@ fn test_single_char_tokens() {
 
     for (input, expected) in test_cases {
         let mut lexer = Lexer::new(input);
-        let token = lexer.next_token();
+        let token = lexer.next_token().unwrap();
         assert_eq!(token, expected, "Failed for input: {}", input);
-        assert_eq!(lexer.next_token(), Token::Eof);
+        assert_eq!(lexer.next_token().unwrap(), Token::Eof);
     }
 }
 
@@ -59,9 +59,9 @@ fn test_two_char_tokens() {
 
     for (input, expected) in test_cases {
         let mut lexer = Lexer::new(input);
-        let token = lexer.next_token();
+        let token = lexer.next_token().unwrap();
         assert_eq!(token, expected, "Failed for input: {}", input);
-        assert_eq!(lexer.next_token(), Token::Eof);
+        assert_eq!(lexer.next_token().unwrap(), Token::Eof);
     }
 }
 
@@ -69,28 +69,29 @@ fn test_two_char_tokens() {
 fn test_two_char_vs_single_char() {
     // Valid: < followed by ==
     let mut lexer = Lexer::new("< ==");
-    assert_eq!(lexer.next_token(), Token::Lt);
-    assert_eq!(lexer.next_token(), Token::EqEq);
-    assert_eq!(lexer.next_token(), Token::Eof);
+    assert_eq!(lexer.next_token().unwrap(), Token::Lt);
+    assert_eq!(lexer.next_token().unwrap(), Token::EqEq);
+    assert_eq!(lexer.next_token().unwrap(), Token::Eof);
 
     // Valid: <= as single token
     let mut lexer = Lexer::new("<=");
-    assert_eq!(lexer.next_token(), Token::LtEq);
-    assert_eq!(lexer.next_token(), Token::Eof);
+    assert_eq!(lexer.next_token().unwrap(), Token::LtEq);
+    assert_eq!(lexer.next_token().unwrap(), Token::Eof);
 
     // Valid: < without space, then <=
     let mut lexer = Lexer::new("< <=");
-    assert_eq!(lexer.next_token(), Token::Lt);
-    assert_eq!(lexer.next_token(), Token::LtEq);
-    assert_eq!(lexer.next_token(), Token::Eof);
+    assert_eq!(lexer.next_token().unwrap(), Token::Lt);
+    assert_eq!(lexer.next_token().unwrap(), Token::LtEq);
+    assert_eq!(lexer.next_token().unwrap(), Token::Eof);
 }
 
 #[test]
-#[should_panic(expected = "Unexpected '='")]
 fn test_bare_equals_is_invalid() {
     let mut lexer = Lexer::new("< =");
-    lexer.next_token(); // Gets 
-    lexer.next_token(); // Should panic on bare =
+    lexer.next_token().unwrap(); // Gets <
+    let result = lexer.next_token();
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Unexpected '='"));
 }
 
 // ============================================================================
@@ -109,9 +110,9 @@ fn test_keywords() {
 
     for (input, expected) in test_cases {
         let mut lexer = Lexer::new(input);
-        let token = lexer.next_token();
+        let token = lexer.next_token().unwrap();
         assert_eq!(token, expected, "Failed for input: {}", input);
-        assert_eq!(lexer.next_token(), Token::Eof);
+        assert_eq!(lexer.next_token().unwrap(), Token::Eof);
     }
 }
 
@@ -131,7 +132,7 @@ fn test_keywords_vs_identifiers() {
 
     for (input, expected) in test_cases {
         let mut lexer = Lexer::new(input);
-        match lexer.next_token() {
+        match lexer.next_token().unwrap() {
             Token::Identifier(ident) => {
                 assert_eq!(ident, expected, "Failed for input: {}", input);
             }
@@ -161,13 +162,13 @@ fn test_identifiers() {
 
     for input in test_cases {
         let mut lexer = Lexer::new(input);
-        match lexer.next_token() {
+        match lexer.next_token().unwrap() {
             Token::Identifier(ident) => {
                 assert_eq!(ident, input, "Failed for input: {}", input);
             }
             other => panic!("Expected Identifier, got {:?} for input: {}", other, input),
         }
-        assert_eq!(lexer.next_token(), Token::Eof);
+        assert_eq!(lexer.next_token().unwrap(), Token::Eof);
     }
 }
 
@@ -181,13 +182,13 @@ fn test_integers() {
 
     for (input, expected) in test_cases {
         let mut lexer = Lexer::new(input);
-        match lexer.next_token() {
+        match lexer.next_token().unwrap() {
             Token::Integer(n) => {
                 assert_eq!(n, expected, "Failed for input: {}", input);
             }
             other => panic!("Expected Number, got {:?} for input: {}", other, input),
         }
-        assert_eq!(lexer.next_token(), Token::Eof);
+        assert_eq!(lexer.next_token().unwrap(), Token::Eof);
     }
 }
 
@@ -203,7 +204,7 @@ fn test_ints() {
 
     for (input, expected) in test_cases {
         let mut lexer = Lexer::new(input);
-        match lexer.next_token() {
+        match lexer.next_token().unwrap() {
             Token::Integer(n) => {
                 assert_eq!(
                     n, expected,
@@ -213,7 +214,7 @@ fn test_ints() {
             }
             other => panic!("Expected Number, got {:?} for input: {}", other, input),
         }
-        assert_eq!(lexer.next_token(), Token::Eof);
+        assert_eq!(lexer.next_token().unwrap(), Token::Eof);
     }
 }
 
@@ -229,7 +230,7 @@ fn test_floats() {
 
     for (input, expected) in test_cases {
         let mut lexer = Lexer::new(input);
-        match lexer.next_token() {
+        match lexer.next_token().unwrap() {
             Token::Float(n) => {
                 assert!(
                     (n - expected).abs() < 0.0001,
@@ -241,7 +242,7 @@ fn test_floats() {
             }
             other => panic!("Expected Number, got {:?} for input: {}", other, input),
         }
-        assert_eq!(lexer.next_token(), Token::Eof);
+        assert_eq!(lexer.next_token().unwrap(), Token::Eof);
     }
 }
 
@@ -253,7 +254,7 @@ fn test_negative_numbers() {
         let mut lexer = Lexer::new(input);
         let mut result: Vec<Token> = vec![];
         loop {
-            let token = lexer.next_token();
+            let token = lexer.next_token().unwrap();
             if token == Token::Eof {
                 break;
             }
@@ -267,15 +268,15 @@ fn test_negative_numbers() {
 fn test_minus_vs_negative() {
     // "5-3" should be Number(5), Minus, Number(3)
     let mut lexer = Lexer::new("5-3");
-    assert!(matches!(lexer.next_token(), Token::Integer(n) if n == 5));
-    assert_eq!(lexer.next_token(), Token::Minus);
-    assert!(matches!(lexer.next_token(), Token::Integer(n) if n == 3));
+    assert!(matches!(lexer.next_token().unwrap(), Token::Integer(n) if n == 5));
+    assert_eq!(lexer.next_token().unwrap(), Token::Minus);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Integer(n) if n == 3));
 
     // "5 - 3" with spaces
     let mut lexer = Lexer::new("5 - 3.0");
-    assert!(matches!(lexer.next_token(), Token::Integer(n) if n == 5));
-    assert_eq!(lexer.next_token(), Token::Minus);
-    assert!(matches!(lexer.next_token(), Token::Float(n) if n == 3.0));
+    assert!(matches!(lexer.next_token().unwrap(), Token::Integer(n) if n == 5));
+    assert_eq!(lexer.next_token().unwrap(), Token::Minus);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Float(n) if n == 3.0));
 }
 
 // ============================================================================
@@ -295,13 +296,13 @@ fn test_simple_strings() {
 
     for (input, expected) in test_cases {
         let mut lexer = Lexer::new(input);
-        match lexer.next_token() {
+        match lexer.next_token().unwrap() {
             Token::String(s) => {
                 assert_eq!(s, expected, "Failed for input: {}", input);
             }
             other => panic!("Expected String, got {:?} for input: {}", other, input),
         }
-        assert_eq!(lexer.next_token(), Token::Eof);
+        assert_eq!(lexer.next_token().unwrap(), Token::Eof);
     }
 }
 
@@ -318,7 +319,7 @@ fn test_string_escapes() {
 
     for (input, expected) in test_cases {
         let mut lexer = Lexer::new(input);
-        match lexer.next_token() {
+        match lexer.next_token().unwrap() {
             Token::String(s) => {
                 assert_eq!(s, expected, "Failed for input: {}", input);
             }
@@ -333,7 +334,7 @@ fn test_single_quote_strings() {
 
     for (input, expected) in test_cases {
         let mut lexer = Lexer::new(input);
-        match lexer.next_token() {
+        match lexer.next_token().unwrap() {
             Token::String(s) => {
                 assert_eq!(s, expected, "Failed for input: {}", input);
             }
@@ -358,14 +359,14 @@ fn test_whitespace_ignored() {
 
     for input in inputs {
         let mut lexer = Lexer::new(input);
-        assert_eq!(lexer.next_token(), Token::Dollar);
-        assert_eq!(lexer.next_token(), Token::LBracket);
-        match lexer.next_token() {
+        assert_eq!(lexer.next_token().unwrap(), Token::Dollar);
+        assert_eq!(lexer.next_token().unwrap(), Token::LBracket);
+        match lexer.next_token().unwrap() {
             Token::Identifier(s) if s == "field" => {}
             other => panic!("Expected Identifier(field), got {:?}", other),
         }
-        assert_eq!(lexer.next_token(), Token::RBracket);
-        assert_eq!(lexer.next_token(), Token::Eof);
+        assert_eq!(lexer.next_token().unwrap(), Token::RBracket);
+        assert_eq!(lexer.next_token().unwrap(), Token::Eof);
     }
 }
 
@@ -376,26 +377,26 @@ fn test_whitespace_ignored() {
 #[test]
 fn test_simple_access() {
     let mut lexer = Lexer::new("$[items][0]");
-    assert_eq!(lexer.next_token(), Token::Dollar);
-    assert_eq!(lexer.next_token(), Token::LBracket);
-    assert!(matches!(lexer.next_token(), Token::Identifier(s) if s == "items"));
-    assert_eq!(lexer.next_token(), Token::RBracket);
-    assert_eq!(lexer.next_token(), Token::LBracket);
-    assert!(matches!(lexer.next_token(), Token::Integer(n) if n == 0));
-    assert_eq!(lexer.next_token(), Token::RBracket);
-    assert_eq!(lexer.next_token(), Token::Eof);
+    assert_eq!(lexer.next_token().unwrap(), Token::Dollar);
+    assert_eq!(lexer.next_token().unwrap(), Token::LBracket);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Identifier(s) if s == "items"));
+    assert_eq!(lexer.next_token().unwrap(), Token::RBracket);
+    assert_eq!(lexer.next_token().unwrap(), Token::LBracket);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Integer(n) if n == 0));
+    assert_eq!(lexer.next_token().unwrap(), Token::RBracket);
+    assert_eq!(lexer.next_token().unwrap(), Token::Eof);
 }
 
 #[test]
 fn test_comparison_expression() {
     let mut lexer = Lexer::new("$[price] > 100");
-    assert_eq!(lexer.next_token(), Token::Dollar);
-    assert_eq!(lexer.next_token(), Token::LBracket);
-    assert!(matches!(lexer.next_token(), Token::Identifier(s) if s == "price"));
-    assert_eq!(lexer.next_token(), Token::RBracket);
-    assert_eq!(lexer.next_token(), Token::Gt);
-    assert!(matches!(lexer.next_token(), Token::Integer(n) if n == 100));
-    assert_eq!(lexer.next_token(), Token::Eof);
+    assert_eq!(lexer.next_token().unwrap(), Token::Dollar);
+    assert_eq!(lexer.next_token().unwrap(), Token::LBracket);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Identifier(s) if s == "price"));
+    assert_eq!(lexer.next_token().unwrap(), Token::RBracket);
+    assert_eq!(lexer.next_token().unwrap(), Token::Gt);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Integer(n) if n == 100));
+    assert_eq!(lexer.next_token().unwrap(), Token::Eof);
 }
 
 #[test]
@@ -403,109 +404,109 @@ fn test_logical_expression() {
     let mut lexer = Lexer::new("$[age] > 18 and $[verified] == true");
 
     // $[age] > 18
-    assert_eq!(lexer.next_token(), Token::Dollar);
-    assert_eq!(lexer.next_token(), Token::LBracket);
-    assert!(matches!(lexer.next_token(), Token::Identifier(s) if s == "age"));
-    assert_eq!(lexer.next_token(), Token::RBracket);
-    assert_eq!(lexer.next_token(), Token::Gt);
-    assert!(matches!(lexer.next_token(), Token::Integer(n) if n == 18));
+    assert_eq!(lexer.next_token().unwrap(), Token::Dollar);
+    assert_eq!(lexer.next_token().unwrap(), Token::LBracket);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Identifier(s) if s == "age"));
+    assert_eq!(lexer.next_token().unwrap(), Token::RBracket);
+    assert_eq!(lexer.next_token().unwrap(), Token::Gt);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Integer(n) if n == 18));
 
     // and
-    assert_eq!(lexer.next_token(), Token::And);
+    assert_eq!(lexer.next_token().unwrap(), Token::And);
 
     // $[verified] == true
-    assert_eq!(lexer.next_token(), Token::Dollar);
-    assert_eq!(lexer.next_token(), Token::LBracket);
-    assert!(matches!(lexer.next_token(), Token::Identifier(s) if s == "verified"));
-    assert_eq!(lexer.next_token(), Token::RBracket);
-    assert_eq!(lexer.next_token(), Token::EqEq);
-    assert_eq!(lexer.next_token(), Token::Boolean(true));
+    assert_eq!(lexer.next_token().unwrap(), Token::Dollar);
+    assert_eq!(lexer.next_token().unwrap(), Token::LBracket);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Identifier(s) if s == "verified"));
+    assert_eq!(lexer.next_token().unwrap(), Token::RBracket);
+    assert_eq!(lexer.next_token().unwrap(), Token::EqEq);
+    assert_eq!(lexer.next_token().unwrap(), Token::Boolean(true));
 
-    assert_eq!(lexer.next_token(), Token::Eof);
+    assert_eq!(lexer.next_token().unwrap(), Token::Eof);
 }
 
 #[test]
 fn test_filter_syntax() {
     let mut lexer = Lexer::new(r#"$ | ?($[status] == "active")"#);
 
-    assert_eq!(lexer.next_token(), Token::Dollar);
-    assert_eq!(lexer.next_token(), Token::Pipe);
-    assert_eq!(lexer.next_token(), Token::Question);
-    assert_eq!(lexer.next_token(), Token::LParen);
-    assert_eq!(lexer.next_token(), Token::Dollar);
-    assert_eq!(lexer.next_token(), Token::LBracket);
-    assert!(matches!(lexer.next_token(), Token::Identifier(s) if s == "status"));
-    assert_eq!(lexer.next_token(), Token::RBracket);
-    assert_eq!(lexer.next_token(), Token::EqEq);
-    assert!(matches!(lexer.next_token(), Token::String(s) if s == "active"));
-    assert_eq!(lexer.next_token(), Token::RParen);
-    assert_eq!(lexer.next_token(), Token::Eof);
+    assert_eq!(lexer.next_token().unwrap(), Token::Dollar);
+    assert_eq!(lexer.next_token().unwrap(), Token::Pipe);
+    assert_eq!(lexer.next_token().unwrap(), Token::Question);
+    assert_eq!(lexer.next_token().unwrap(), Token::LParen);
+    assert_eq!(lexer.next_token().unwrap(), Token::Dollar);
+    assert_eq!(lexer.next_token().unwrap(), Token::LBracket);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Identifier(s) if s == "status"));
+    assert_eq!(lexer.next_token().unwrap(), Token::RBracket);
+    assert_eq!(lexer.next_token().unwrap(), Token::EqEq);
+    assert!(matches!(lexer.next_token().unwrap(), Token::String(s) if s == "active"));
+    assert_eq!(lexer.next_token().unwrap(), Token::RParen);
+    assert_eq!(lexer.next_token().unwrap(), Token::Eof);
 }
 
 #[test]
 fn test_transform_syntax() {
     let mut lexer = Lexer::new("~($[price] := $[price] * 1.1)");
 
-    assert_eq!(lexer.next_token(), Token::Tilde);
-    assert_eq!(lexer.next_token(), Token::LParen);
-    assert_eq!(lexer.next_token(), Token::Dollar);
-    assert_eq!(lexer.next_token(), Token::LBracket);
-    assert!(matches!(lexer.next_token(), Token::Identifier(s) if s == "price"));
-    assert_eq!(lexer.next_token(), Token::RBracket);
-    assert_eq!(lexer.next_token(), Token::ColonEqual);
-    assert_eq!(lexer.next_token(), Token::Dollar);
-    assert_eq!(lexer.next_token(), Token::LBracket);
-    assert!(matches!(lexer.next_token(), Token::Identifier(s) if s == "price"));
-    assert_eq!(lexer.next_token(), Token::RBracket);
-    assert_eq!(lexer.next_token(), Token::Star);
-    assert!(matches!(lexer.next_token(), Token::Float(n) if (n - 1.1).abs() < 0.0001));
-    assert_eq!(lexer.next_token(), Token::RParen);
-    assert_eq!(lexer.next_token(), Token::Eof);
+    assert_eq!(lexer.next_token().unwrap(), Token::Tilde);
+    assert_eq!(lexer.next_token().unwrap(), Token::LParen);
+    assert_eq!(lexer.next_token().unwrap(), Token::Dollar);
+    assert_eq!(lexer.next_token().unwrap(), Token::LBracket);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Identifier(s) if s == "price"));
+    assert_eq!(lexer.next_token().unwrap(), Token::RBracket);
+    assert_eq!(lexer.next_token().unwrap(), Token::ColonEqual);
+    assert_eq!(lexer.next_token().unwrap(), Token::Dollar);
+    assert_eq!(lexer.next_token().unwrap(), Token::LBracket);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Identifier(s) if s == "price"));
+    assert_eq!(lexer.next_token().unwrap(), Token::RBracket);
+    assert_eq!(lexer.next_token().unwrap(), Token::Star);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Float(n) if (n - 1.1).abs() < 0.0001));
+    assert_eq!(lexer.next_token().unwrap(), Token::RParen);
+    assert_eq!(lexer.next_token().unwrap(), Token::Eof);
 }
 
 #[test]
 fn test_scope_reference() {
     let mut lexer = Lexer::new("@items := $[items]");
 
-    assert_eq!(lexer.next_token(), Token::At);
-    assert!(matches!(lexer.next_token(), Token::Identifier(s) if s == "items"));
-    assert_eq!(lexer.next_token(), Token::ColonEqual);
-    assert_eq!(lexer.next_token(), Token::Dollar);
-    assert_eq!(lexer.next_token(), Token::LBracket);
-    assert!(matches!(lexer.next_token(), Token::Identifier(s) if s == "items"));
-    assert_eq!(lexer.next_token(), Token::RBracket);
-    assert_eq!(lexer.next_token(), Token::Eof);
+    assert_eq!(lexer.next_token().unwrap(), Token::At);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Identifier(s) if s == "items"));
+    assert_eq!(lexer.next_token().unwrap(), Token::ColonEqual);
+    assert_eq!(lexer.next_token().unwrap(), Token::Dollar);
+    assert_eq!(lexer.next_token().unwrap(), Token::LBracket);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Identifier(s) if s == "items"));
+    assert_eq!(lexer.next_token().unwrap(), Token::RBracket);
+    assert_eq!(lexer.next_token().unwrap(), Token::Eof);
 }
 
 #[test]
 fn test_method_call() {
     let mut lexer = Lexer::new("$[items].any(@[price] > 100)");
 
-    assert_eq!(lexer.next_token(), Token::Dollar);
-    assert_eq!(lexer.next_token(), Token::LBracket);
-    assert!(matches!(lexer.next_token(), Token::Identifier(s) if s == "items"));
-    assert_eq!(lexer.next_token(), Token::RBracket);
-    assert_eq!(lexer.next_token(), Token::Dot);
-    assert!(matches!(lexer.next_token(), Token::Identifier(s) if s == "any"));
-    assert_eq!(lexer.next_token(), Token::LParen);
-    assert_eq!(lexer.next_token(), Token::At);
-    assert_eq!(lexer.next_token(), Token::LBracket);
-    assert!(matches!(lexer.next_token(), Token::Identifier(s) if s == "price"));
-    assert_eq!(lexer.next_token(), Token::RBracket);
-    assert_eq!(lexer.next_token(), Token::Gt);
-    assert!(matches!(lexer.next_token(), Token::Integer(n) if n == 100));
-    assert_eq!(lexer.next_token(), Token::RParen);
-    assert_eq!(lexer.next_token(), Token::Eof);
+    assert_eq!(lexer.next_token().unwrap(), Token::Dollar);
+    assert_eq!(lexer.next_token().unwrap(), Token::LBracket);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Identifier(s) if s == "items"));
+    assert_eq!(lexer.next_token().unwrap(), Token::RBracket);
+    assert_eq!(lexer.next_token().unwrap(), Token::Dot);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Identifier(s) if s == "any"));
+    assert_eq!(lexer.next_token().unwrap(), Token::LParen);
+    assert_eq!(lexer.next_token().unwrap(), Token::At);
+    assert_eq!(lexer.next_token().unwrap(), Token::LBracket);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Identifier(s) if s == "price"));
+    assert_eq!(lexer.next_token().unwrap(), Token::RBracket);
+    assert_eq!(lexer.next_token().unwrap(), Token::Gt);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Integer(n) if n == 100));
+    assert_eq!(lexer.next_token().unwrap(), Token::RParen);
+    assert_eq!(lexer.next_token().unwrap(), Token::Eof);
 }
 
 #[test]
 fn test_udf_definition() {
     let mut lexer = Lexer::new("&expensive,1 := ?(@1[price] > 100)");
 
-    assert_eq!(lexer.next_token(), Token::Ampersand);
-    assert!(matches!(lexer.next_token(), Token::Identifier(s) if s == "expensive"));
-    assert_eq!(lexer.next_token(), Token::Comma);
-    assert!(matches!(lexer.next_token(), Token::Integer(n) if n == 1));
+    assert_eq!(lexer.next_token().unwrap(), Token::Ampersand);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Identifier(s) if s == "expensive"));
+    assert_eq!(lexer.next_token().unwrap(), Token::Comma);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Integer(n) if n == 1));
     // ... rest of tokens
 }
 
@@ -546,7 +547,7 @@ fn test_arithmetic() {
     ];
 
     for expected_token in expected {
-        let token = lexer.next_token();
+        let token = lexer.next_token().unwrap();
         assert_eq!(token, expected_token);
     }
 }
@@ -558,34 +559,34 @@ fn test_arithmetic() {
 #[test]
 fn test_empty_input() {
     let mut lexer = Lexer::new("");
-    assert_eq!(lexer.next_token(), Token::Eof);
-    assert_eq!(lexer.next_token(), Token::Eof); // Should stay at EOF
+    assert_eq!(lexer.next_token().unwrap(), Token::Eof);
+    assert_eq!(lexer.next_token().unwrap(), Token::Eof); // Should stay at EOF
 }
 
 #[test]
 fn test_only_whitespace() {
     let mut lexer = Lexer::new("   \t\n\r   ");
-    assert_eq!(lexer.next_token(), Token::Eof);
+    assert_eq!(lexer.next_token().unwrap(), Token::Eof);
 }
 
 #[test]
 fn test_consecutive_operators() {
     let mut lexer = Lexer::new("==!=");
-    assert_eq!(lexer.next_token(), Token::EqEq);
-    assert_eq!(lexer.next_token(), Token::NotEq);
-    assert_eq!(lexer.next_token(), Token::Eof);
+    assert_eq!(lexer.next_token().unwrap(), Token::EqEq);
+    assert_eq!(lexer.next_token().unwrap(), Token::NotEq);
+    assert_eq!(lexer.next_token().unwrap(), Token::Eof);
 }
 
 #[test]
 fn test_no_space_between_tokens() {
     let mut lexer = Lexer::new("$[x]>5and$[y]<10");
-    assert_eq!(lexer.next_token(), Token::Dollar);
-    assert_eq!(lexer.next_token(), Token::LBracket);
-    assert!(matches!(lexer.next_token(), Token::Identifier(_)));
-    assert_eq!(lexer.next_token(), Token::RBracket);
-    assert_eq!(lexer.next_token(), Token::Gt);
-    assert!(matches!(lexer.next_token(), Token::Integer(_)));
-    assert_eq!(lexer.next_token(), Token::And);
+    assert_eq!(lexer.next_token().unwrap(), Token::Dollar);
+    assert_eq!(lexer.next_token().unwrap(), Token::LBracket);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Identifier(_)));
+    assert_eq!(lexer.next_token().unwrap(), Token::RBracket);
+    assert_eq!(lexer.next_token().unwrap(), Token::Gt);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Integer(_)));
+    assert_eq!(lexer.next_token().unwrap(), Token::And);
     // etc...
 }
 
@@ -594,38 +595,43 @@ fn test_no_space_between_tokens() {
 // ============================================================================
 
 #[test]
-#[should_panic(expected = "Unterminated string")]
 fn test_unterminated_string() {
     let mut lexer = Lexer::new(r##"'hello"##);
-    lexer.next_token();
+    let result = lexer.next_token();
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Unterminated string"));
 }
 
 #[test]
-#[should_panic(expected = "Unterminated string: unexpected EOF after backslash")]
 fn test_unterminated_string_after_backslash() {
     let mut lexer = Lexer::new(r##"'hello\"##);
-    lexer.next_token();
+    let result = lexer.next_token();
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Unexpected end of input"));
 }
 
 #[test]
-#[should_panic(expected = "Invalid escape sequence")]
 fn test_invalid_escape_sequence() {
     let mut lexer = Lexer::new(r#""hello\x""#);
-    lexer.next_token();
+    let result = lexer.next_token();
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Invalid escape sequence"));
 }
 
 #[test]
-#[should_panic(expected = "Unexpected '='")]
 fn test_bare_equals() {
     let mut lexer = Lexer::new("=");
-    lexer.next_token();
+    let result = lexer.next_token();
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Unexpected '='"));
 }
 
 #[test]
-#[should_panic(expected = "Unexpected character")]
 fn test_invalid_character() {
     let mut lexer = Lexer::new("#");
-    lexer.next_token();
+    let result = lexer.next_token();
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Unexpected character"));
 }
 
 // ============================================================================
@@ -636,33 +642,33 @@ fn test_invalid_character() {
 fn test_env_var_vs_root() {
     // Environment variable
     let mut lexer = Lexer::new("$HOME");
-    assert!(matches!(lexer.next_token(), Token::EnvVar(s) if s == "HOME"));
+    assert!(matches!(lexer.next_token().unwrap(), Token::EnvVar(s) if s == "HOME"));
 
     // Root document
     let mut lexer = Lexer::new("$");
-    assert_eq!(lexer.next_token(), Token::Dollar);
+    assert_eq!(lexer.next_token().unwrap(), Token::Dollar);
 
     // Root with access (NOT env var)
     let mut lexer = Lexer::new("$[HOME]");
-    assert_eq!(lexer.next_token(), Token::Dollar);
-    assert_eq!(lexer.next_token(), Token::LBracket);
-    assert!(matches!(lexer.next_token(), Token::Identifier(s) if s == "HOME"));
+    assert_eq!(lexer.next_token().unwrap(), Token::Dollar);
+    assert_eq!(lexer.next_token().unwrap(), Token::LBracket);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Identifier(s) if s == "HOME"));
 }
 
 #[test]
 fn test_env_var_in_expression() {
     let mut lexer = Lexer::new("$[price] > $THRESHOLD");
 
-    assert_eq!(lexer.next_token(), Token::Dollar);
-    assert_eq!(lexer.next_token(), Token::LBracket);
-    assert!(matches!(lexer.next_token(), Token::Identifier(s) if s == "price"));
-    assert_eq!(lexer.next_token(), Token::RBracket);
-    assert_eq!(lexer.next_token(), Token::Gt);
-    assert!(matches!(lexer.next_token(), Token::EnvVar(s) if s == "THRESHOLD"));
+    assert_eq!(lexer.next_token().unwrap(), Token::Dollar);
+    assert_eq!(lexer.next_token().unwrap(), Token::LBracket);
+    assert!(matches!(lexer.next_token().unwrap(), Token::Identifier(s) if s == "price"));
+    assert_eq!(lexer.next_token().unwrap(), Token::RBracket);
+    assert_eq!(lexer.next_token().unwrap(), Token::Gt);
+    assert!(matches!(lexer.next_token().unwrap(), Token::EnvVar(s) if s == "THRESHOLD"));
 }
 
 #[test]
 fn test_lowercase_env_var() {
     let mut lexer = Lexer::new("$api_key");
-    assert!(matches!(lexer.next_token(), Token::EnvVar(s) if s == "api_key"));
+    assert!(matches!(lexer.next_token().unwrap(), Token::EnvVar(s) if s == "api_key"));
 }

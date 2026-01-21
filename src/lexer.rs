@@ -1,8 +1,69 @@
 use crate::ast::Token;
 
+/// Position in source code for error reporting
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Position {
+    pub line: usize,
+    pub column: usize,
+    pub offset: usize,
+}
+
+impl Position {
+    pub fn new(line: usize, column: usize, offset: usize) -> Self {
+        Position { line, column, offset }
+    }
+}
+
+impl std::fmt::Display for Position {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "line {}, column {}", self.line, self.column)
+    }
+}
+
+/// Errors that can occur during lexical analysis
+#[derive(Debug, Clone, PartialEq)]
+pub enum LexError {
+    /// Unexpected character in input
+    UnexpectedChar { char: char, position: Position },
+    /// Unterminated string literal
+    UnterminatedString { position: Position },
+    /// Invalid escape sequence in string
+    InvalidEscape { char: char, position: Position },
+    /// Unexpected EOF (e.g., in middle of string)
+    UnexpectedEof { context: String, position: Position },
+    /// Bare '=' without '=='
+    BareEquals { position: Position },
+}
+
+impl std::fmt::Display for LexError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LexError::UnexpectedChar { char, position } => {
+                write!(f, "Unexpected character '{}' at {}", char, position)
+            }
+            LexError::UnterminatedString { position } => {
+                write!(f, "Unterminated string at {}", position)
+            }
+            LexError::InvalidEscape { char, position } => {
+                write!(f, "Invalid escape sequence '\\{}' at {}", char, position)
+            }
+            LexError::UnexpectedEof { context, position } => {
+                write!(f, "Unexpected end of input {} at {}", context, position)
+            }
+            LexError::BareEquals { position } => {
+                write!(f, "Unexpected '=' at {} (did you mean '==', '!=' or ':='?)", position)
+            }
+        }
+    }
+}
+
+impl std::error::Error for LexError {}
+
 pub struct Lexer {
     input: Vec<char>,
     position: usize,
+    line: usize,
+    column: usize,
 }
 
 impl Lexer {
@@ -10,6 +71,8 @@ impl Lexer {
         Lexer {
             input: input.chars().collect(),
             position: 0,
+            line: 1,
+            column: 1,
         }
     }
 
@@ -20,7 +83,20 @@ impl Lexer {
     fn peek_char(&self, offset: usize) -> Option<char> {
         self.input.get(self.position + offset).copied()
     }
+
+    fn current_position(&self) -> Position {
+        Position::new(self.line, self.column, self.position)
+    }
+
     fn advance(&mut self) {
+        if let Some(ch) = self.current_char() {
+            if ch == '\n' {
+                self.line += 1;
+                self.column = 1;
+            } else {
+                self.column += 1;
+            }
+        }
         self.position += 1;
     }
 
@@ -47,26 +123,39 @@ impl Lexer {
         result
     }
 
-    fn read_string(&mut self, quote: char) -> String {
+    fn read_string(&mut self, quote: char) -> Result<String, LexError> {
+        let start_pos = self.current_position();
         let mut result = String::new();
-        self.advance(); // ✓ Consume opening quote
+        self.advance(); // Consume opening quote
 
         while let Some(ch) = self.current_char() {
             match ch {
                 c if c == quote => {
                     self.advance();
-                    return result;
+                    return Ok(result);
                 }
                 '\\' => {
                     self.advance(); // Consume backslash
+                    let escape_pos = self.current_position();
                     match self.current_char() {
                         Some('n') => result.push('\n'),
                         Some('t') => result.push('\t'),
                         Some('r') => result.push('\r'),
                         Some('"') => result.push('"'),
+                        Some('\'') => result.push('\''),
                         Some('\\') => result.push('\\'),
-                        Some(ch) => panic!("Invalid escape sequence: \\{}", ch),
-                        None => panic!("Unterminated string: unexpected EOF after backslash"),
+                        Some(ch) => {
+                            return Err(LexError::InvalidEscape {
+                                char: ch,
+                                position: escape_pos,
+                            });
+                        }
+                        None => {
+                            return Err(LexError::UnexpectedEof {
+                                context: "after backslash in string".to_string(),
+                                position: escape_pos,
+                            });
+                        }
                     }
                     self.advance();
                 }
@@ -77,7 +166,7 @@ impl Lexer {
             }
         }
 
-        panic!("Unterminated string: missing closing quote");
+        Err(LexError::UnterminatedString { position: start_pos })
     }
 
     fn read_number(&mut self) -> Token {
@@ -107,11 +196,11 @@ impl Lexer {
         }
     }
 
-    pub fn next_token(&mut self) -> Token {
+    pub fn next_token(&mut self) -> Result<Token, LexError> {
         self.skip_whitespace();
 
         match self.current_char() {
-            None => Token::Eof,
+            None => Ok(Token::Eof),
             Some('$') => {
                 if self
                     .peek_char(1)
@@ -119,155 +208,153 @@ impl Lexer {
                 {
                     self.advance();
                     let name = self.read_identifier();
-                    Token::EnvVar(name)
+                    Ok(Token::EnvVar(name))
                 } else {
                     self.advance();
-                    Token::Dollar
+                    Ok(Token::Dollar)
                 }
             }
             Some('&') => {
                 self.advance();
-                Token::Ampersand
+                Ok(Token::Ampersand)
             }
             Some('|') => {
                 self.advance();
-                Token::Pipe
+                Ok(Token::Pipe)
             }
             Some('.') => {
                 self.advance();
-                Token::Dot
+                Ok(Token::Dot)
             }
             Some(',') => {
                 self.advance();
-                Token::Comma
+                Ok(Token::Comma)
             }
             Some('+') => {
                 self.advance();
-                Token::Plus
+                Ok(Token::Plus)
             }
             Some('-') => {
                 self.advance();
-                Token::Minus
+                Ok(Token::Minus)
             }
             Some('*') => {
                 self.advance();
-                Token::Star
+                Ok(Token::Star)
             }
             Some('/') => {
                 self.advance();
-                Token::Slash
+                Ok(Token::Slash)
             }
             Some('%') => {
                 self.advance();
-                Token::Percent
+                Ok(Token::Percent)
             }
             Some('?') => {
                 self.advance();
-                Token::Question
+                Ok(Token::Question)
             }
             Some('~') => {
                 self.advance();
-                Token::Tilde
+                Ok(Token::Tilde)
             }
             Some('=') => {
+                let pos = self.current_position();
                 if self.peek_char(1) == Some('=') {
                     self.advance();
                     self.advance();
-                    Token::EqEq
+                    Ok(Token::EqEq)
                 } else {
-                    panic!(
-                        "Panic at character '=', position {}:\nUnexpected '=' (did you mean '==', '!=' or ':='?)",
-                        self.position,
-                    )
+                    Err(LexError::BareEquals { position: pos })
                 }
             }
             Some(':') => {
                 if self.peek_char(1) == Some('=') {
                     self.advance();
                     self.advance();
-                    Token::ColonEqual
+                    Ok(Token::ColonEqual)
                 } else {
                     self.advance();
-                    Token::Colon
+                    Ok(Token::Colon)
                 }
             }
             Some('>') => {
                 if self.peek_char(1) == Some('=') {
                     self.advance();
                     self.advance();
-                    Token::GtEq
+                    Ok(Token::GtEq)
                 } else {
                     self.advance();
-                    Token::Gt
+                    Ok(Token::Gt)
                 }
             }
             Some('<') => {
                 if self.peek_char(1) == Some('=') {
                     self.advance();
                     self.advance();
-                    Token::LtEq
+                    Ok(Token::LtEq)
                 } else {
                     self.advance();
-                    Token::Lt
+                    Ok(Token::Lt)
                 }
             }
             Some('!') => {
                 if self.peek_char(1) == Some('=') {
                     self.advance();
                     self.advance();
-                    Token::NotEq
+                    Ok(Token::NotEq)
                 } else {
                     self.advance();
-                    Token::Exclamation
+                    Ok(Token::Exclamation)
                 }
             }
             Some('{') => {
                 self.advance();
-                Token::LBrace
+                Ok(Token::LBrace)
             }
             Some('}') => {
                 self.advance();
-                Token::RBrace
+                Ok(Token::RBrace)
             }
-            Some('"') => Token::String(self.read_string('"')),
-            Some('\'') => Token::String(self.read_string('\'')),
+            Some('"') => Ok(Token::String(self.read_string('"')?)),
+            Some('\'') => Ok(Token::String(self.read_string('\'')?)),
             Some('@') => {
                 self.advance();
-                Token::At
+                Ok(Token::At)
             }
             Some('(') => {
                 self.advance();
-                Token::LParen
+                Ok(Token::LParen)
             }
             Some(')') => {
                 self.advance();
-                Token::RParen
+                Ok(Token::RParen)
             }
             Some('[') => {
                 self.advance();
-                Token::LBracket
+                Ok(Token::LBracket)
             }
             Some(']') => {
                 self.advance();
-                Token::RBracket
+                Ok(Token::RBracket)
             }
             Some(ch) if ch.is_alphabetic() || ch == '_' => {
                 let ident = self.read_identifier();
 
                 match ident.as_str() {
-                    "and" => Token::And,
-                    "or" => Token::Or,
-                    "true" => Token::Boolean(true),
-                    "false" => Token::Boolean(false),
-                    "null" => Token::Null,
-                    _ => Token::Identifier(ident),
+                    "and" => Ok(Token::And),
+                    "or" => Ok(Token::Or),
+                    "true" => Ok(Token::Boolean(true)),
+                    "false" => Ok(Token::Boolean(false)),
+                    "null" => Ok(Token::Null),
+                    _ => Ok(Token::Identifier(ident)),
                 }
             }
-            Some(ch) if ch.is_ascii_digit() => self.read_number(),
-            Some(ch) => panic!(
-                "Unexpected character '{}' at position {}",
-                ch, self.position
-            ),
+            Some(ch) if ch.is_ascii_digit() => Ok(self.read_number()),
+            Some(ch) => {
+                let pos = self.current_position();
+                Err(LexError::UnexpectedChar { char: ch, position: pos })
+            }
         }
     }
 }
@@ -275,25 +362,25 @@ impl Lexer {
 #[test]
 fn test_keywords() {
     let mut lexer = Lexer::new("and or true false null");
-    assert_eq!(lexer.next_token(), Token::And);
-    assert_eq!(lexer.next_token(), Token::Or);
-    assert_eq!(lexer.next_token(), Token::Boolean(true));
-    assert_eq!(lexer.next_token(), Token::Boolean(false));
-    assert_eq!(lexer.next_token(), Token::Null);
+    assert_eq!(lexer.next_token().unwrap(), Token::And);
+    assert_eq!(lexer.next_token().unwrap(), Token::Or);
+    assert_eq!(lexer.next_token().unwrap(), Token::Boolean(true));
+    assert_eq!(lexer.next_token().unwrap(), Token::Boolean(false));
+    assert_eq!(lexer.next_token().unwrap(), Token::Null);
 }
 
 #[test]
 fn test_pipe() {
     let mut lexer = Lexer::new("$ | ?($[x] > 5)");
-    assert_eq!(lexer.next_token(), Token::Dollar);
-    assert_eq!(lexer.next_token(), Token::Pipe);
-    assert_eq!(lexer.next_token(), Token::Question);
-    assert_eq!(lexer.next_token(), Token::LParen);
-    assert_eq!(lexer.next_token(), Token::Dollar);
-    assert_eq!(lexer.next_token(), Token::LBracket);
-    assert_eq!(lexer.next_token(), Token::Identifier("x".to_string()));
-    assert_eq!(lexer.next_token(), Token::RBracket);
-    assert_eq!(lexer.next_token(), Token::Gt);
-    assert_eq!(lexer.next_token(), Token::Integer(5));
-    assert_eq!(lexer.next_token(), Token::RParen);
+    assert_eq!(lexer.next_token().unwrap(), Token::Dollar);
+    assert_eq!(lexer.next_token().unwrap(), Token::Pipe);
+    assert_eq!(lexer.next_token().unwrap(), Token::Question);
+    assert_eq!(lexer.next_token().unwrap(), Token::LParen);
+    assert_eq!(lexer.next_token().unwrap(), Token::Dollar);
+    assert_eq!(lexer.next_token().unwrap(), Token::LBracket);
+    assert_eq!(lexer.next_token().unwrap(), Token::Identifier("x".to_string()));
+    assert_eq!(lexer.next_token().unwrap(), Token::RBracket);
+    assert_eq!(lexer.next_token().unwrap(), Token::Gt);
+    assert_eq!(lexer.next_token().unwrap(), Token::Integer(5));
+    assert_eq!(lexer.next_token().unwrap(), Token::RParen);
 }
