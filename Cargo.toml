@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.91"
 description = "A JSON query language for filtering, transforming, and validating JSON documents"
 license = "MIT"
-repository = "https://github.com/retchee/clove-lang"
+repository = "https://git.rachee.dev/tools/clove-lang"
 
 [lib]
 path = "src/lib.rs"
