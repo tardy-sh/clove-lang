@@ -1,10 +1,11 @@
 [package]
 name = "clove-lang"
-version = "0.1.1"
-edition.workspace = true
-rust-version.workspace = true
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.91"
 description = "A JSON query language for filtering, transforming, and validating JSON documents"
 license = "MIT"
+repository = "https://github.com/retchee/clove-lang"
 
 [lib]
 path = "src/lib.rs"
@@ -12,11 +13,21 @@ path = "src/lib.rs"
 [[bin]]
 name = "clove"
 path = "src/main.rs"
+required-features = ["cli"]
+
+[features]
+default = ["cli"]
+cli = ["dep:clap", "dep:atty"]
 
 [dependencies]
-atty = "0.2"
-clap = { version = "4", features = ["derive"] }
 rust_decimal = "1.39"
 serde_json = "1"
+clap = { version = "4", features = ["derive"], optional = true }
+atty = { version = "0.2", optional = true }
 
-
+[profile.release]
+opt-level = "z"
+strip = true
+lto = true
+panic = "abort"
+codegen-units = 1
