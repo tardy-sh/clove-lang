@@ -57,6 +57,7 @@ release:
 publish:
   stage: publish
   image: rust:latest
+  dependencies: []
   before_script:
     - echo "$CARGO_REGISTRY_TOKEN" | cargo login
   script:
