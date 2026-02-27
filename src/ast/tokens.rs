@@ -113,6 +113,17 @@ pub enum Token {
     /// ~($[items] := ?(@[price] > 100))
     /// ```
     Question,
+
+    /// Null-coalescing operator (`??`)
+    ///
+    /// Returns left operand if non-null, otherwise evaluates right operand.
+    ///
+    /// # Examples
+    /// ```text
+    /// $[severity] ?? $[level] ?? "unknown"
+    /// ($[bytes] ?? 0) / 1024
+    /// ```
+    DoubleQuestion,
     
     /// Transform operator
     ///

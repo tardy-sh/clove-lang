@@ -406,8 +406,24 @@ impl Parser {
         Ok(left)
     }
 
+    fn parse_null_coalesce(&mut self) -> Result<Expr, ParseError> {
+        let mut left = self.parse_or()?;
+
+        while self.check(&Token::DoubleQuestion) {
+            self.advance()?;
+            let right = self.parse_or()?;
+
+            left = Expr::BinaryOp {
+                op: BinOp::NullCoalesce,
+                left: Box::new(left),
+                right: Box::new(right),
+            };
+        }
+        Ok(left)
+    }
+
     pub fn parse_expression(&mut self) -> Result<Expr, ParseError> {
-        self.parse_or()
+        self.parse_null_coalesce()
     }
 
     pub fn parse(&mut self) -> Result<Expr, ParseError> {
@@ -455,11 +471,37 @@ impl Parser {
             Token::Question => self.parse_filter(),
             Token::Tilde => self.parse_transform(),
             Token::At => self.parse_scope_definition_or_access(),
+            Token::Minus => {
+                // Peek: if '-' followed by '(' it's a delete statement
+                // Otherwise fall through to expression parsing
+                self.advance()?;
+                if self.check(&Token::LParen) {
+                    self.parse_delete()
+                } else {
+                    // Put back the minus context by parsing as negation expression
+                    let operand = self.parse_primary()?;
+                    let expr = Expr::BinaryOp {
+                        op: BinOp::Subtract,
+                        left: Box::new(Expr::Integer(0)),
+                        right: Box::new(operand),
+                    };
+                    // Continue parsing the rest of the expression
+                    // (access, multiplicative, additive, etc.)
+                    Ok(Statement::Access(expr))
+                }
+            }
             _ => {
                 let expr = self.parse_expression()?;
                 Ok(Statement::Access(expr))
             }
         }
+    }
+
+    fn parse_delete(&mut self) -> Result<Statement, ParseError> {
+        self.expect(Token::LParen)?;
+        let path_expr = self.parse_access()?;
+        self.expect(Token::RParen)?;
+        Ok(Statement::Delete(path_expr))
     }
 
     fn parse_filter(&mut self) -> Result<Statement, ParseError> {

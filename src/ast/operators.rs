@@ -32,4 +32,8 @@ pub enum BinOp {
     And,
     /// Logical OR (`or`)
     Or,
+
+    // Null-coalescing
+    /// Null-coalescing (`??`)
+    NullCoalesce,
 }

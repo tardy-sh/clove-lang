@@ -16,6 +16,7 @@ statement = scope_definition
           | existence_check
           | filter_stmt
           | transform_stmt
+          | delete_stmt
           | access ;
 
 scope_definition = scope_ref , ":=" , access ;
@@ -25,6 +26,8 @@ existence_check = access , "[?]" ;
 filter_stmt = "?" , "(" , condition , ")" ;
 
 transform_stmt = "~" , "(" , assignment , ")" ;
+
+delete_stmt = "-" , "(" , path_expression , ")" ;
 
 assignment = access , ":=" , transform_rhs ;
 
@@ -42,19 +45,21 @@ output_expr = access
             | object_literal
             | array_literal ;
 
-(* Conditions - Boolean Logic *)
-condition = or_condition ;
+(* Conditions and Expressions share the same precedence chain *)
+condition = expression ;
 
-or_condition = and_condition , { "or" , and_condition } ;
+(* Expressions - precedence from lowest to highest *)
+expression = null_coalesce_expr ;
 
-and_condition = comparison , { "and" , comparison } ;
+null_coalesce_expr = or_expr , { "??" , or_expr } ;
 
-comparison = expression , [ comparison_op , expression ] ;
+or_expr = and_expr , { ( "or" | "||" ) , and_expr } ;
+
+and_expr = comparison_expr , { ( "and" | "&&" ) , comparison_expr } ;
+
+comparison_expr = arithmetic_expr , [ comparison_op , arithmetic_expr ] ;
 
 comparison_op = "==" | "!=" | "<" | ">" | "<=" | ">=" ;
-
-(* Expressions *)
-expression = arithmetic_expr ;
 
 arithmetic_expr = term , { additive_op , term } ;
 additive_op = "+" | "-" ;
@@ -72,8 +77,12 @@ method_chain = method_call , { method_call } ;
 
 method_call = "." , method_name , "(" , [ method_args ] , ")" ;
 
-method_name = "any" | "all" | "filter" | "map" | "sum" | "count" 
-            | "exists" | "first" | "last" | "unique" | "sort" ;
+method_name = "any" | "all" | "filter" | "map" | "sum" | "count"
+            | "exists" | "first" | "last" | "unique" | "sort"
+            | "upper" | "lower" | "trim" | "split" | "contains"
+            | "startswith" | "endswith" | "matches"
+            | "keys" | "values" | "type" | "length"
+            | "min" | "max" | "avg" | "sort_desc" | "reverse" | "flatten" ;
 
 method_args = lambda_expr
             | expression , { "," , expression } ;
@@ -96,6 +105,9 @@ arg_ref = "@" , digit , { digit } ;
 udf_call = "&" , identifier , "[" , udf_args , "]" ;
 
 udf_args = expression , { "," , expression } ;
+
+(* Path expression for delete targets - must be a literal access path *)
+path_expression = root , { accessor } ;
 
 accessor = bracket_accessor | dot_accessor ;
 

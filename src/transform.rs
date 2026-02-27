@@ -207,7 +207,7 @@ pub fn uses_lambda_param(expr: &Expr) -> bool {
             .any(|(_, value_expr)| uses_lambda_param(value_expr)),
 
         // Array literals check all elements
-        Expr::Array(elements) => elements.iter().any(|elem| uses_lambda_param(elem)),
+        Expr::Array(elements) => elements.iter().any(uses_lambda_param),
 
         // Filter expression - check the condition
         Expr::Filter(condition) => uses_lambda_param(condition),
@@ -217,11 +217,11 @@ pub fn uses_lambda_param(expr: &Expr) -> bool {
 
         // Method calls check object and all arguments
         Expr::MethodCall { object, args, .. } => {
-            uses_lambda_param(object) || args.iter().any(|arg| uses_lambda_param(arg))
+            uses_lambda_param(object) || args.iter().any(uses_lambda_param)
         }
 
         // UDF calls check all arguments
-        Expr::UDFCall { args, .. } => args.iter().any(|arg| uses_lambda_param(arg)),
+        Expr::UDFCall { args, .. } => args.iter().any(uses_lambda_param),
 
         // These never contain lambda params
         Expr::Null

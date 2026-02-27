@@ -190,6 +190,15 @@ impl Evaluator {
                 self.scopes.insert(name.clone(), value);
                 Ok(ctx.root.clone())
             }
+            Statement::Delete(path_expr) => {
+                let path = extract_path(path_expr)?;
+                if path.is_empty() {
+                    return Ok(ctx.root.clone());
+                }
+                let mut result = ctx.root.clone();
+                self.delete_field(&mut result, &path);
+                Ok(result)
+            }
             Statement::Access(expr) => self.eval_expr(expr, ctx),
             Statement::ExistenceCheck(_expr) => unreachable!(),
         }
@@ -226,9 +235,18 @@ impl Evaluator {
                 self.apply_access(&obj_value, &key_value)
             }
             Expr::BinaryOp { op, left, right } => {
-                let left_val = self.eval_expr(left, context)?;
-                let right_val = self.eval_expr(right, context)?;
-                self.apply_binop(*op, &left_val, &right_val)
+                if *op == BinOp::NullCoalesce {
+                    let left_val = self.eval_expr(left, context)?;
+                    if left_val == Value::Null {
+                        self.eval_expr(right, context)
+                    } else {
+                        Ok(left_val)
+                    }
+                } else {
+                    let left_val = self.eval_expr(left, context)?;
+                    let right_val = self.eval_expr(right, context)?;
+                    self.apply_binop(*op, &left_val, &right_val)
+                }
             }
             Expr::Object(items) => {
                 let mut map = HashMap::new();
@@ -565,9 +583,64 @@ impl Evaluator {
             },
             BinOp::And => Ok(Value::Boolean(left.as_bool() && right.as_bool())),
             BinOp::Or => Ok(Value::Boolean(left.as_bool() || right.as_bool())),
+            BinOp::NullCoalesce => unreachable!("NullCoalesce handled in eval_expr"),
         }
     }
-    /// Apply transform (complex - we'll implement this next)
+    /// Remove a field at the given path. Silent no-op if path doesn't exist.
+    fn delete_field(&self, current: &mut Value, path: &[PathSegment]) {
+        if path.is_empty() {
+            return;
+        }
+
+        if path.len() == 1 {
+            // Remove the target key from parent
+            match (&mut *current, &path[0]) {
+                (Value::Object(map), PathSegment::Field(key)) => {
+                    map.remove(key);
+                }
+                (Value::Array(arr), PathSegment::Index(idx)) => {
+                    let len = arr.len();
+                    let index = if *idx < 0 {
+                        let abs = idx.unsigned_abs() as usize;
+                        if abs > len { return; }
+                        len - abs
+                    } else {
+                        *idx as usize
+                    };
+                    if index < len {
+                        arr.remove(index);
+                    }
+                }
+                _ => {} // no-op
+            }
+            return;
+        }
+
+        // Navigate to parent, then recurse
+        match (&mut *current, &path[0]) {
+            (Value::Object(map), PathSegment::Field(key)) => {
+                if let Some(child) = map.get_mut(key) {
+                    self.delete_field(child, &path[1..]);
+                }
+                // missing intermediate → no-op
+            }
+            (Value::Array(arr), PathSegment::Index(idx)) => {
+                let len = arr.len();
+                let index = if *idx < 0 {
+                    let abs = idx.unsigned_abs() as usize;
+                    if abs > len { return; }
+                    len - abs
+                } else {
+                    *idx as usize
+                };
+                if let Some(child) = arr.get_mut(index) {
+                    self.delete_field(child, &path[1..]);
+                }
+            }
+            _ => {} // no-op
+        }
+    }
+
     fn apply_transform(
         &mut self,
         ctx: &EvalContext,
@@ -814,6 +887,7 @@ impl Evaluator {
             "contains" => self.method_contains(object, args, ctx),
             "startswith" => self.method_startswith(object, args, ctx),
             "endswith" => self.method_endswith(object, args, ctx),
+            "matches" => self.method_matches(object, args, ctx),
             // Object methods
             "keys" => self.method_keys(object),
             "values" => self.method_values(object),
@@ -1259,6 +1333,36 @@ impl Evaluator {
                 ".endswith() argument must be string, got {}",
                 type_name(&suffix)
             ))),
+        }
+    }
+
+    /// .matches(pattern) - returns true if string matches regex pattern
+    fn method_matches(
+        &self,
+        object: &Value,
+        args: &[Expr],
+        ctx: &EvalContext,
+    ) -> Result<Value, EvalError> {
+        if args.len() != 1 {
+            return Err(EvalError::TypeError(
+                ".matches() requires exactly one argument".to_string(),
+            ));
+        }
+        let pattern_val = self.eval_expr(&args[0], ctx)?;
+        let pattern_str = match &pattern_val {
+            Value::String(s) => s.as_str(),
+            _ => {
+                return Err(EvalError::TypeError(format!(
+                    ".matches() argument must be string, got {}",
+                    type_name(&pattern_val)
+                )))
+            }
+        };
+        let re = regex::Regex::new(pattern_str)
+            .map_err(|e| EvalError::TypeError(format!("invalid regex: {e}")))?;
+        match object {
+            Value::String(s) => Ok(Value::Boolean(re.is_match(s))),
+            _ => Ok(Value::Boolean(false)),
         }
     }
 

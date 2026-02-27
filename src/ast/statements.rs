@@ -49,6 +49,17 @@ pub enum Statement {
         value: Expr,
     },
     
+    /// Field deletion
+    ///
+    /// Removes the specified field from the document. Silent no-op if nonexistent.
+    ///
+    /// # Example
+    /// ```text
+    /// $ | -($[password])
+    /// $ | -($[user][token])
+    /// ```
+    Delete(Expr),
+
     /// Plain access (passes through the value)
     ///
     /// # Example

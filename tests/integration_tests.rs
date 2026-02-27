@@ -1406,3 +1406,345 @@ fn test_error_unknown_method() {
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("Unknown method"));
 }
+
+// ============================================
+// Null-Coalescing Operator (??) Tests
+// ============================================
+
+#[test]
+fn test_null_coalesce_null_returns_right() {
+    let doc = json_object(vec![]);
+    let result = eval_expr("null ?? 42", doc).unwrap();
+    assert_eq!(result, Value::Integer(42));
+}
+
+#[test]
+fn test_null_coalesce_non_null_returns_left() {
+    let doc = json_object(vec![]);
+    let result = eval_expr("42 ?? 99", doc).unwrap();
+    assert_eq!(result, Value::Integer(42));
+}
+
+#[test]
+fn test_null_coalesce_field_fallback_missing() {
+    let doc = json_object(vec![
+        ("name", Value::String("test".into())),
+    ]);
+    let result = eval_expr(r#"$[nonexistent] ?? "default""#, doc).unwrap();
+    assert_eq!(result, Value::String("default".into()));
+}
+
+#[test]
+fn test_null_coalesce_field_fallback_present() {
+    let doc = json_object(vec![
+        ("name", Value::String("test".into())),
+    ]);
+    let result = eval_expr(r#"$[name] ?? "default""#, doc).unwrap();
+    assert_eq!(result, Value::String("test".into()));
+}
+
+#[test]
+fn test_null_coalesce_chain_all_null() {
+    let doc = json_object(vec![]);
+    let result = eval_expr("null ?? null ?? 42", doc).unwrap();
+    assert_eq!(result, Value::Integer(42));
+}
+
+#[test]
+fn test_null_coalesce_chain_middle_non_null() {
+    let doc = json_object(vec![]);
+    let result = eval_expr(r#"null ?? "found" ?? 42"#, doc).unwrap();
+    assert_eq!(result, Value::String("found".into()));
+}
+
+#[test]
+fn test_null_coalesce_with_arithmetic() {
+    let doc = json_object(vec![
+        ("bytes", Value::Integer(2048)),
+    ]);
+    let result = eval_expr("($[bytes] ?? 0) / 1024", doc).unwrap();
+    assert_eq!(result, Value::Integer(2));
+}
+
+#[test]
+fn test_null_coalesce_with_arithmetic_fallback() {
+    let doc = json_object(vec![]);
+    let result = eval_expr("($[bytes] ?? 0) / 1024", doc).unwrap();
+    assert_eq!(result, Value::Integer(0));
+}
+
+#[test]
+fn test_null_coalesce_false_is_not_null() {
+    let doc = json_object(vec![]);
+    let result = eval_expr("false ?? 42", doc).unwrap();
+    assert_eq!(result, Value::Boolean(false));
+}
+
+#[test]
+fn test_null_coalesce_zero_is_not_null() {
+    let doc = json_object(vec![]);
+    let result = eval_expr("0 ?? 42", doc).unwrap();
+    assert_eq!(result, Value::Integer(0));
+}
+
+#[test]
+fn test_null_coalesce_empty_string_is_not_null() {
+    let doc = json_object(vec![]);
+    let result = eval_expr(r#""" ?? "fallback""#, doc).unwrap();
+    assert_eq!(result, Value::String("".into()));
+}
+
+#[test]
+fn test_null_coalesce_in_query_transform() {
+    let doc = json_object(vec![
+        ("severity", Value::String("high".into())),
+    ]);
+    let result = eval_query(
+        r#"$ | ~($[level] := $[severity] ?? $[priority] ?? "info")"#,
+        doc,
+    ).unwrap();
+    match result {
+        Value::Object(map) => {
+            assert_eq!(map.get("level"), Some(&Value::String("high".into())));
+        }
+        _ => panic!("Expected object"),
+    }
+}
+
+#[test]
+fn test_null_coalesce_in_query_transform_fallback() {
+    let doc = json_object(vec![
+        ("name", Value::String("test".into())),
+    ]);
+    let result = eval_query(
+        r#"$ | ~($[level] := $[severity] ?? $[priority] ?? "info")"#,
+        doc,
+    ).unwrap();
+    match result {
+        Value::Object(map) => {
+            assert_eq!(map.get("level"), Some(&Value::String("info".into())));
+        }
+        _ => panic!("Expected object"),
+    }
+}
+
+// ============================================
+// .matches() Regex Method Tests
+// ============================================
+
+#[test]
+fn test_matches_basic_true() {
+    let doc = json_object(vec![]);
+    let result = eval_expr(r#""hello world".matches("hello")"#, doc).unwrap();
+    assert_eq!(result, Value::Boolean(true));
+}
+
+#[test]
+fn test_matches_anchored_no_match() {
+    let doc = json_object(vec![]);
+    let result = eval_expr(r#""hello world".matches("^hello$")"#, doc).unwrap();
+    assert_eq!(result, Value::Boolean(false));
+}
+
+#[test]
+fn test_matches_anchored_match() {
+    let doc = json_object(vec![]);
+    let result = eval_expr(r#""hello world".matches("^hello world$")"#, doc).unwrap();
+    assert_eq!(result, Value::Boolean(true));
+}
+
+#[test]
+fn test_matches_field_access_match() {
+    let doc = json_object(vec![
+        ("message", Value::String("Failed login from 10.0.0.1".into())),
+    ]);
+    let result = eval_expr(r#"$[message].matches("Failed .* from")"#, doc).unwrap();
+    assert_eq!(result, Value::Boolean(true));
+}
+
+#[test]
+fn test_matches_field_access_no_match() {
+    let doc = json_object(vec![
+        ("message", Value::String("Success".into())),
+    ]);
+    let result = eval_expr(r#"$[message].matches("Failed .* from")"#, doc).unwrap();
+    assert_eq!(result, Value::Boolean(false));
+}
+
+#[test]
+fn test_matches_digit_pattern() {
+    let doc = json_object(vec![]);
+    let result = eval_expr(r#""abc123".matches("\\d+")"#, doc).unwrap();
+    assert_eq!(result, Value::Boolean(true));
+}
+
+#[test]
+fn test_matches_digit_pattern_no_match() {
+    let doc = json_object(vec![]);
+    let result = eval_expr(r#""abc".matches("\\d+")"#, doc).unwrap();
+    assert_eq!(result, Value::Boolean(false));
+}
+
+#[test]
+fn test_matches_non_string_receiver_integer() {
+    let doc = json_object(vec![]);
+    let result = eval_expr(r#"42.matches("\\d+")"#, doc).unwrap();
+    assert_eq!(result, Value::Boolean(false));
+}
+
+#[test]
+fn test_matches_non_string_receiver_null() {
+    let doc = json_object(vec![]);
+    let result = eval_expr(r#"null.matches("any")"#, doc).unwrap();
+    assert_eq!(result, Value::Boolean(false));
+}
+
+#[test]
+fn test_matches_invalid_regex_error() {
+    let doc = json_object(vec![]);
+    let result = eval_expr(r#""test".matches("[invalid")"#, doc);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("invalid regex"));
+}
+
+#[test]
+fn test_matches_in_query_filter_pass() {
+    let doc = json_object(vec![
+        ("message", Value::String("ERROR: disk full".into())),
+    ]);
+    let result = eval_query(r#"$ | ?($[message].matches("^ERROR"))"#, doc.clone()).unwrap();
+    assert_eq!(result, doc);
+}
+
+#[test]
+fn test_matches_in_query_filter_reject() {
+    let doc = json_object(vec![
+        ("message", Value::String("INFO: all good".into())),
+    ]);
+    let result = eval_query(r#"$ | ?($[message].matches("^ERROR"))"#, doc).unwrap();
+    assert_eq!(result, Value::Null);
+}
+
+#[test]
+fn test_matches_api_path_pattern() {
+    let doc = json_object(vec![
+        ("path", Value::String("/api/v2/users".into())),
+    ]);
+    let result = eval_expr(r#"$[path].matches("^/api/v[12]/")"#, doc).unwrap();
+    assert_eq!(result, Value::Boolean(true));
+}
+
+// ============================================
+// Field Deletion -() Tests
+// ============================================
+
+#[test]
+fn test_delete_top_level_field() {
+    let doc = json_object(vec![
+        ("name", Value::String("alice".into())),
+        ("password", Value::String("secret".into())),
+    ]);
+    let result = eval_query("$ | -($[password])", doc).unwrap();
+    match result {
+        Value::Object(map) => {
+            assert_eq!(map.get("name"), Some(&Value::String("alice".into())));
+            assert_eq!(map.get("password"), None);
+            assert_eq!(map.len(), 1);
+        }
+        _ => panic!("Expected object"),
+    }
+}
+
+#[test]
+fn test_delete_nested_field() {
+    let doc = json_object(vec![
+        ("user", json_object(vec![
+            ("name", Value::String("alice".into())),
+            ("token", Value::String("abc".into())),
+        ])),
+    ]);
+    let result = eval_query("$ | -($[user][token])", doc).unwrap();
+    match result {
+        Value::Object(map) => {
+            match map.get("user") {
+                Some(Value::Object(user)) => {
+                    assert_eq!(user.get("name"), Some(&Value::String("alice".into())));
+                    assert_eq!(user.get("token"), None);
+                    assert_eq!(user.len(), 1);
+                }
+                _ => panic!("Expected user object"),
+            }
+        }
+        _ => panic!("Expected object"),
+    }
+}
+
+#[test]
+fn test_delete_missing_field_noop() {
+    let doc = json_object(vec![
+        ("name", Value::String("alice".into())),
+    ]);
+    let result = eval_query("$ | -($[nonexistent])", doc.clone()).unwrap();
+    assert_eq!(result, doc);
+}
+
+#[test]
+fn test_delete_chain_multiple() {
+    let doc = json_object(vec![
+        ("name", Value::String("a".into())),
+        ("password", Value::String("p".into())),
+        ("secret", Value::String("s".into())),
+    ]);
+    let result = eval_query("$ | -($[password]) | -($[secret])", doc).unwrap();
+    match result {
+        Value::Object(map) => {
+            assert_eq!(map.get("name"), Some(&Value::String("a".into())));
+            assert_eq!(map.get("password"), None);
+            assert_eq!(map.get("secret"), None);
+            assert_eq!(map.len(), 1);
+        }
+        _ => panic!("Expected object"),
+    }
+}
+
+#[test]
+fn test_delete_then_transform() {
+    let doc = json_object(vec![
+        ("raw", Value::String("data".into())),
+        ("id", Value::Integer(1)),
+    ]);
+    let result = eval_query("$ | -($[raw]) | ~($[processed] := true)", doc).unwrap();
+    match result {
+        Value::Object(map) => {
+            assert_eq!(map.get("raw"), None);
+            assert_eq!(map.get("id"), Some(&Value::Integer(1)));
+            assert_eq!(map.get("processed"), Some(&Value::Boolean(true)));
+        }
+        _ => panic!("Expected object"),
+    }
+}
+
+#[test]
+fn test_delete_then_filter() {
+    let doc = json_object(vec![
+        ("level", Value::String("info".into())),
+        ("debug", Value::Boolean(true)),
+    ]);
+    let result = eval_query(r#"$ | -($[debug]) | ?($[level] != "debug")"#, doc).unwrap();
+    match result {
+        Value::Object(map) => {
+            assert_eq!(map.get("level"), Some(&Value::String("info".into())));
+            assert_eq!(map.get("debug"), None);
+        }
+        _ => panic!("Expected object"),
+    }
+}
+
+#[test]
+fn test_delete_deep_nested_missing_intermediate_noop() {
+    let doc = json_object(vec![
+        ("x", Value::Integer(1)),
+    ]);
+    let result = eval_query("$ | -($[a][b][c])", doc.clone()).unwrap();
+    assert_eq!(result, doc);
+}

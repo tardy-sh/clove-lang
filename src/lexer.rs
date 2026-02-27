@@ -262,7 +262,12 @@ impl Lexer {
             }
             Some('?') => {
                 self.advance();
-                Ok(Token::Question)
+                if self.current_char() == Some('?') {
+                    self.advance();
+                    Ok(Token::DoubleQuestion)
+                } else {
+                    Ok(Token::Question)
+                }
             }
             Some('~') => {
                 self.advance();
@@ -393,6 +398,26 @@ fn test_pipe() {
     assert_eq!(lexer.next_token().unwrap(), Token::Gt);
     assert_eq!(lexer.next_token().unwrap(), Token::Integer(5));
     assert_eq!(lexer.next_token().unwrap(), Token::RParen);
+}
+
+#[test]
+fn test_double_question() {
+    // ?? should produce DoubleQuestion
+    let mut lexer = Lexer::new("$[a] ?? $[b]");
+    assert_eq!(lexer.next_token().unwrap(), Token::Dollar);
+    assert_eq!(lexer.next_token().unwrap(), Token::LBracket);
+    assert_eq!(lexer.next_token().unwrap(), Token::Identifier("a".to_string()));
+    assert_eq!(lexer.next_token().unwrap(), Token::RBracket);
+    assert_eq!(lexer.next_token().unwrap(), Token::DoubleQuestion);
+    assert_eq!(lexer.next_token().unwrap(), Token::Dollar);
+
+    // Single ? should still produce Question
+    let mut lexer = Lexer::new("$[a]?");
+    assert_eq!(lexer.next_token().unwrap(), Token::Dollar);
+    assert_eq!(lexer.next_token().unwrap(), Token::LBracket);
+    assert_eq!(lexer.next_token().unwrap(), Token::Identifier("a".to_string()));
+    assert_eq!(lexer.next_token().unwrap(), Token::RBracket);
+    assert_eq!(lexer.next_token().unwrap(), Token::Question);
 }
 
 #[test]

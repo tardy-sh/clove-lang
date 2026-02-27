@@ -189,6 +189,16 @@ Modifies fields. Uses `:=` for assignment.
 - Cannot use scope references as targets (e.g., `~(@items := ...)` is invalid)
 - Integer keys create array index paths; float keys create object field paths
 
+### Delete Operator: `-()`
+
+Removes the specified field from the document. Silent no-op if the field does not exist. Can be chained.
+```
+$ | -($[password])                        # removes top-level "password" field
+$ | -($[user][api_key])                   # removes nested "api_key" from "user" object
+$ | -($[password]) | -($[secret])         # removes multiple fields
+$ | -($[_internal]) | ~($[processed] := true)  # delete then transform
+```
+
 ### Output Operator: `!()`
 
 Specifies what to return. Optional; defaults to `!($)`.
@@ -237,6 +247,20 @@ $ | operation1 | operation2 | operation3
 | `\|\|`   | Logical OR  | `$[role] == "admin" \|\| $[role] == "mod"`|
 
 Both keyword (`and`/`or`) and symbol (`&&`/`||`) forms are supported.
+
+### Null-Coalescing Operator
+
+| Operator | Meaning          | Example                               |
+|----------|------------------|---------------------------------------|
+| `??`     | Null-coalescing  | `$[severity] ?? $[level] ?? "unknown"`|
+
+Returns the left operand if it is non-null, otherwise evaluates and returns the right operand. Short-circuits: the right side is not evaluated if the left is non-null. Chains left-to-right: `a ?? b ?? c`.
+
+```
+$[severity] ?? $[level] ?? "unknown"          # first non-null value
+($[bytes] ?? 0) / 1024                        # null-safe arithmetic
+$[user][name] ?? $[user][login] ?? "anonymous" # nested field fallback
+```
 
 ### Arithmetic Operators
 
@@ -498,6 +522,15 @@ Returns the number of characters in a string.
 $[name].length()
 ```
 
+#### `matches(pattern)`
+
+Returns true if the string matches the regex pattern (Rust regex syntax). Returns false for non-string receivers (not an error).
+```
+$[message].matches("Failed .* from \\d+\\.\\d+\\.\\d+\\.\\d+")
+$[path].matches("^/api/v[12]/")
+$[status].to_string().matches("^[45]")
+```
+
 ---
 
 ## User-Defined Functions (UDFs)
@@ -701,6 +734,7 @@ From highest to lowest:
 4. Comparison: `==`, `!=`, `<`, `>`, `<=`, `>=`
 5. Logical AND: `and`
 6. Logical OR: `or`
+7. Null-coalescing: `??`
 
 Use parentheses `()` to override precedence.
 

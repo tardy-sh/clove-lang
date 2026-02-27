@@ -17,6 +17,7 @@ pub enum DocCategory {
 
 impl DocCategory {
     /// Parse category name from string
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().replace('-', "_").as_str() {
             "syntax" => Some(Self::Syntax),
